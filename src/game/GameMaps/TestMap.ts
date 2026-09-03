@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { GameMap } from "../../type/GameTypes";
 import { createCourseWalls } from "../GameHelpers/CreateWalls";
 import { SpawnLine } from "../GameHelpers/SpawnLine";
+import { createObstacle } from "../GameHelpers/CreateObstacle";
 
 export class TestMap extends GameMap {
     spawnLine!: SpawnLine;
@@ -16,14 +17,8 @@ export class TestMap extends GameMap {
             new Phaser.Math.Vector2(800, 300),
         );
 
-        // Create whatever objects this map needs
-        scene.matter.add.circle(500, 400, 30, {
-            isStatic: true,
-        });
-
-        scene.matter.add.rectangle(700, 500, 100, 20, {
-            isStatic: true,
-        });
+        // Create objects
+        createObstacle(scene, 700, 500, 100, 20, 0xffffff);
     }
 
     getBallSpawnPosition(

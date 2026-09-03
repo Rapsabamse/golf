@@ -3,7 +3,7 @@ import { EventBus } from "../EventBus";
 import { Network } from "../Networking/Network";
 import { GameMap } from "../../type/GameTypes";
 import { TestMap } from "../GameMaps/TestMap";
-import { GameStates, Player } from "../../../server/types/types";
+import { GameState } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 
@@ -11,14 +11,6 @@ export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
     background: Phaser.GameObjects.Image;
     gameText: Phaser.GameObjects.Text;
-
-    private balls = new Map<
-        string,
-        {
-            visual: Phaser.GameObjects.Arc;
-            body: MatterJS.BodyType;
-        }
-    >();
 
     private network!: Network;
     private currentMap!: GameMap;
@@ -44,11 +36,15 @@ export class Game extends Phaser.Scene {
         };
 
         //Subscribe to gamestateUpdates
-        this.network.onGameStateChange = (gamestate) => {
-            if (gamestate === GameStates.PLANNING) {
+        this.network.onGameStateChange = (gamestate, data?) => {
+            if (gamestate === GameState.PLANNING) {
                 this.aimController.updateCanInteract(true);
             } else {
                 this.aimController.updateCanInteract(false);
+            }
+
+            if (gamestate === GameState.SIMULATING) {
+                this.ballManager.simulateRound(data);
             }
         };
 
@@ -62,8 +58,10 @@ export class Game extends Phaser.Scene {
         );
 
         //Create inputs
-        this.aimController = new AimController(this, () =>
-            this.ballManager.getOwnBall(),
+        this.aimController = new AimController(
+            this,
+            () => this.ballManager.getOwnBall(),
+            this.network,
         );
 
         EventBus.emit("current-scene-ready", this);
@@ -80,5 +78,8 @@ export class Game extends Phaser.Scene {
     public startGame() {
         this.network.startGame();
     }
-}
 
+    public lockIn() {
+        this.network.ready();
+    }
+}

@@ -80,4 +80,11 @@ export class BallManager {
             ball.visual.setRotation(ball.body.angle);
         }
     }
+
+    simulateRound(data: any) {
+        console.log(data);
+
+        //läs in data korrekt
+        //Simulera alla slag (Lägg in velocityn på rätt bollar)
+    }
 }

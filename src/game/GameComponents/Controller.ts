@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { Network } from "../Networking/Network";
 
 export interface AimBall {
     visual: Phaser.GameObjects.Arc;
@@ -19,13 +20,14 @@ export class AimController {
     constructor(
         private readonly scene: Phaser.Scene,
         private readonly getOwnBall: () => AimBall | undefined,
+        private readonly network: Network,
     ) {
         this.aimLine = scene.add.graphics();
 
-        this.createInputs();
+        this.createInputs(network);
     }
 
-    private createInputs() {
+    private createInputs(network: Network) {
         this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
             if (pointer.event.target !== this.scene.game.canvas) {
                 return;
@@ -91,7 +93,10 @@ export class AimController {
 
             const velocity = direction.scale(force * this.forceMultiplier);
 
-            this.scene.matter.body.setVelocity(ball.body, velocity);
+            //Send shot selected to network instead of setting velocity directly
+            network.sendShot(velocity);
+
+            //this.scene.matter.body.setVelocity(ball.body, velocity);
         });
     }
 

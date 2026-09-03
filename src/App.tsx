@@ -53,12 +53,20 @@ function App() {
                         Join game
                     </button>
                     {isGameScene && game != null && (
-                        <button
-                            className="button"
-                            onClick={() => game?.startGame()}
-                        >
-                            Start Game
-                        </button>
+                        <>
+                            <button
+                                className="button"
+                                onClick={() => game?.startGame()}
+                            >
+                                Start Game
+                            </button>
+                            <button
+                                className="button"
+                                onClick={() => game.lockIn()}
+                            >
+                                Lock in
+                            </button>
+                        </>
                     )}
                 </div>
             </div>

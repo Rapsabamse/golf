@@ -1,13 +1,18 @@
-import { Player, MessageTypes, GameStates } from "../../../server/types/types";
+import {
+    Player,
+    MessageTypeServer,
+    GameState,
+    MessageTypeClient,
+} from "../../../server/types/types";
 
 export class Network {
     private socket!: WebSocket;
     private playerId!: string;
     private players: Player[] = [];
-    private gameState: GameStates;
+    private gameState: GameState;
 
     onPlayerList?: (players: Player[]) => void;
-    onGameStateChange?: (gamestate: GameStates) => void;
+    onGameStateChange?: (gamestate: GameState, data?: any) => void;
 
     connect() {
         this.socket = new WebSocket("ws://localhost:8090");
@@ -19,18 +24,20 @@ export class Network {
         this.socket.onmessage = (event) => {
             const message = JSON.parse(event.data);
 
-            if (message.type === MessageTypes.CONNECTED) {
+            console.log(message);
+
+            if (message.type === MessageTypeServer.CONNECTED) {
                 this.playerId = message.playerId;
             }
 
-            if (message.type === MessageTypes.PLAYER_LIST) {
+            if (message.type === MessageTypeServer.PLAYER_LIST) {
                 this.players = message.players;
                 this.onPlayerList?.(this.players);
             }
 
-            if (message.type === MessageTypes.GAME_STATE) {
+            if (message.type === MessageTypeServer.GAME_STATE) {
                 this.gameState = message.state;
-                this.onGameStateChange?.(this.gameState);
+                this.onGameStateChange?.(this.gameState, message.data);
             }
         };
 
@@ -45,7 +52,14 @@ export class Network {
 
     ready() {
         this.send({
-            type: "READY",
+            type: MessageTypeClient.READY,
+        });
+    }
+
+    sendShot(direction: Phaser.Math.Vector2) {
+        this.send({
+            type: MessageTypeClient.SHOT_SELECTED,
+            data: direction,
         });
     }
 
@@ -58,21 +72,21 @@ export class Network {
     }
 
     isLobbyWaiting(): Boolean {
-        return this.gameState === GameStates.WAITING;
+        return this.gameState === GameState.WAITING;
     }
 
     isLobbyPlanning(): Boolean {
-        return this.gameState === GameStates.PLANNING;
+        return this.gameState === GameState.PLANNING;
     }
 
     isLobbySimulating(): Boolean {
-        return this.gameState === GameStates.SIMULATING;
+        return this.gameState === GameState.SIMULATING;
     }
 
     startGame() {
         this.socket.send(
             JSON.stringify({
-                type: MessageTypes.START_GAME,
+                type: MessageTypeClient.START_GAME,
             }),
         );
     }
