@@ -3,7 +3,7 @@ import { EventBus } from "../EventBus";
 import { Network } from "../Networking/Network";
 import { GameMap } from "../../type/GameTypes";
 import { TestMap } from "../GameMaps/TestMap";
-import { GameState } from "../../../server/types/types";
+import { GameState, ServerData } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 
@@ -44,7 +44,13 @@ export class Game extends Phaser.Scene {
             }
 
             if (gamestate === GameState.SIMULATING) {
-                this.ballManager.simulateRound(data);
+                const recievedData: ServerData = data;
+
+                if (recievedData.playerList) {
+                    console.log("Playerdata: ", recievedData.playerList);
+
+                    this.ballManager.simulateRound(recievedData.playerList);
+                }
             }
         };
 

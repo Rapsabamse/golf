@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { GameMap } from "../../type/GameTypes";
-import { Player } from "../../../server/types/types";
+import { Player, ServerData } from "../../../server/types/types";
 
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
@@ -81,10 +81,16 @@ export class BallManager {
         }
     }
 
-    simulateRound(data: any) {
-        console.log(data);
-
-        //läs in data korrekt
-        //Simulera alla slag (Lägg in velocityn på rätt bollar)
+    simulateRound(data: Player[]) {
+        //Go through each ball and add the velocity send by the server
+        data.forEach((player) => {
+            const ball = this.balls.get(player.id);
+            if (ball && player.shot?.direction) {
+                this.scene.matter.body.setVelocity(
+                    ball.body,
+                    player.shot.direction,
+                );
+            }
+        });
     }
 }

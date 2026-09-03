@@ -24,7 +24,7 @@ export function handleConnection(
     socket.send(
         JSON.stringify({
             type: MessageTypeServer.CONNECTED,
-            playerId,
+            data: { playerId: playerId },
         }),
     );
 
@@ -32,7 +32,7 @@ export function handleConnection(
     socket.send(
         JSON.stringify({
             type: MessageTypeServer.GAME_STATE,
-            state: gameState,
+            data: { state: gameState },
         }),
     );
 

@@ -3,6 +3,7 @@ import {
     MessageTypeClient,
     MessageTypeServer,
     Player,
+    ServerData,
 } from "../types/types";
 import { broadcast } from "../serverHelpers";
 import { WebSocket } from "ws";
@@ -39,7 +40,7 @@ export function handleMessages(
         broadcast(
             {
                 type: MessageTypeServer.GAME_STATE,
-                data: GameState.PLANNING,
+                data: { state: GameState.PLANNING },
             },
             players,
         );
@@ -85,10 +86,20 @@ export function handleMessages(
             if (allPlayersReady) {
                 setGamestate(GameState.SIMULATING);
 
+                const playerList = Array.from(players.values()).map(
+                    (player) => ({
+                        id: player.id,
+                        shot: player.shot,
+                    }),
+                );
+
                 broadcast(
                     {
                         type: MessageTypeServer.GAME_STATE,
-                        data: GameState.SIMULATING,
+                        data: {
+                            state: GameState.SIMULATING,
+                            playerList: playerList,
+                        } as ServerData,
                     },
                     players,
                 );

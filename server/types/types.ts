@@ -43,5 +43,12 @@ export interface PlayerShot {
 
 export interface ServerMessageData {
     type: MessageTypeServer;
-    data?: any;
+    data?: ServerData;
+}
+
+export interface ServerData {
+    state?: GameState;
+    playerData?: Map<string, Player>;
+    playerId?: string;
+    playerList?: Player[];
 }

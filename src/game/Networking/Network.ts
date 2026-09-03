@@ -3,6 +3,7 @@ import {
     MessageTypeServer,
     GameState,
     MessageTypeClient,
+    ServerMessageData,
 } from "../../../server/types/types";
 
 export class Network {
@@ -22,22 +23,30 @@ export class Network {
         };
 
         this.socket.onmessage = (event) => {
-            const message = JSON.parse(event.data);
+            const message: ServerMessageData = JSON.parse(event.data);
 
-            console.log(message);
+            if (message.data === undefined) {
+                return;
+            }
 
             if (message.type === MessageTypeServer.CONNECTED) {
-                this.playerId = message.playerId;
+                if (message.data.playerId) {
+                    this.playerId = message.data.playerId;
+                }
             }
 
             if (message.type === MessageTypeServer.PLAYER_LIST) {
-                this.players = message.players;
-                this.onPlayerList?.(this.players);
+                if (message.data.playerList) {
+                    this.players = message.data.playerList;
+                    this.onPlayerList?.(this.players);
+                }
             }
 
             if (message.type === MessageTypeServer.GAME_STATE) {
-                this.gameState = message.state;
-                this.onGameStateChange?.(this.gameState, message.data);
+                if (message.data.state != undefined) {
+                    this.gameState = message.data.state;
+                    this.onGameStateChange?.(this.gameState, message.data);
+                }
             }
         };
 

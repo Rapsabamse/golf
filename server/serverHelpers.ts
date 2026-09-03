@@ -19,7 +19,7 @@ export function sendPlayerList(players: Map<string, Player>) {
 
     const message = JSON.stringify({
         type: MessageTypeServer.PLAYER_LIST,
-        players: playerList,
+        data: { playerList: playerList },
     });
 
     for (const player of players.values()) {
