@@ -5,6 +5,9 @@ export function handleClose(
     playerId: string,
     players: Map<string, Player>,
     gameState: GameState,
+    setGamestate: (newGamestate: GameState) => void,
+    setHostId: (id: string) => void,
+    getHostId: () => string | undefined,
 ) {
     players.delete(playerId);
 
@@ -14,8 +17,15 @@ export function handleClose(
     // Tell remaining clients about the updated list
     sendPlayerList(players);
 
+    if (playerId === getHostId()) {
+        const newId = players.keys().next().value;
+        if (newId) {
+            setHostId(newId);
+        }
+    }
+
     if (players.size < 1) {
         console.log("All players have left. Going back to waiting state");
-        gameState = GameState.WAITING;
+        setGamestate(GameState.WAITING);
     }
 }

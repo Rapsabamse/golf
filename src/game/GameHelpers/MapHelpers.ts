@@ -42,3 +42,19 @@ export function createCourseWalls(scene: Phaser.Scene) {
         wallOptions,
     );
 }
+
+export function createRectangle(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: number,
+) {
+    scene.add.rectangle(x, y, width, height, color);
+
+    scene.matter.add.rectangle(x, y, width, height, {
+        isStatic: true,
+        restitution: 0.8,
+    });
+}

@@ -17,12 +17,14 @@ export enum GameState {
     WAITING,
     PLANNING,
     SIMULATING,
+    SIMULATING_HOST,
 }
 
 export interface Player {
     id: string;
     socket: WebSocket;
     ready: boolean;
+    finishedSimulating: boolean;
     state: PlayerState;
     roundState?: RoundState;
     shot?: PlayerShot;
@@ -51,4 +53,11 @@ export interface ServerData {
     playerData?: Map<string, Player>;
     playerId?: string;
     playerList?: Player[];
+    ballLocations?: BallLocation[];
+}
+
+export interface BallLocation {
+    playerId: string;
+    x: number;
+    y: number;
 }

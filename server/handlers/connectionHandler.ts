@@ -7,11 +7,14 @@ export function handleConnection(
     players: Map<string, Player>,
     gameState: GameState,
     playerId: string,
+    setHostId: (id: string) => void,
+    getHostId: () => string | undefined,
 ) {
     const player: Player = {
         id: playerId,
         socket,
         ready: false,
+        finishedSimulating: false,
         state: { points: 0 },
     };
 
@@ -19,6 +22,10 @@ export function handleConnection(
 
     console.log(`Player connected: ${playerId}`);
     console.log(`Players: ${players.size}`);
+
+    if (!getHostId()) {
+        setHostId(playerId);
+    }
 
     // Tell the client which ID belongs to them
     socket.send(

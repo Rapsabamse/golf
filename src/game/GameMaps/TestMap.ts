@@ -1,8 +1,7 @@
 import * as Phaser from "phaser";
 import { GameMap } from "../../type/GameTypes";
-import { createCourseWalls } from "../GameHelpers/CreateWalls";
+import { createCourseWalls, createRectangle } from "../GameHelpers/MapHelpers";
 import { SpawnLine } from "../GameHelpers/SpawnLine";
-import { createObstacle } from "../GameHelpers/CreateObstacle";
 
 export class TestMap extends GameMap {
     spawnLine!: SpawnLine;
@@ -18,7 +17,7 @@ export class TestMap extends GameMap {
         );
 
         // Create objects
-        createObstacle(scene, 700, 500, 100, 20, 0xffffff);
+        createRectangle(scene, 700, 500, 100, 20, 0xffffff);
     }
 
     getBallSpawnPosition(

@@ -1,4 +1,5 @@
 import {
+    BallLocation,
     GameState,
     MessageTypeClient,
     MessageTypeServer,
@@ -15,6 +16,9 @@ export function handleMessages(
     gameState: GameState,
     players: Map<string, Player>,
     setGamestate: (newGamestate: GameState) => void,
+    getHostId: () => string | undefined,
+    setBallLocations: (newBallLocations: BallLocation[]) => void,
+    getBallLocations: () => BallLocation[],
 ) {
     const message = JSON.parse(data.toString());
 
@@ -74,14 +78,9 @@ export function handleMessages(
             currentPlayer.ready = true;
             players.set(playerId, currentPlayer);
 
-            //Assume that all players are ready
-            //If one player isnt ready this is set to false, and simulation wont begin
-            let allPlayersReady = true;
-            players.forEach((player) => {
-                if (allPlayersReady) {
-                    allPlayersReady = player.ready;
-                }
-            });
+            const allPlayersReady = Array.from(players.values()).every(
+                (player) => player.ready,
+            );
 
             if (allPlayersReady) {
                 setGamestate(GameState.SIMULATING);
@@ -97,7 +96,9 @@ export function handleMessages(
                     {
                         type: MessageTypeServer.GAME_STATE,
                         data: {
-                            state: GameState.SIMULATING,
+                            state: getHostId()
+                                ? GameState.SIMULATING_HOST
+                                : GameState.SIMULATING,
                             playerList: playerList,
                         } as ServerData,
                     },
@@ -114,7 +115,39 @@ export function handleMessages(
         message.type === MessageTypeClient.SIMULATION_DONE &&
         gameState === GameState.SIMULATING
     ) {
-        //Set that player has completed simulating.
-        //If all players have completed simulation, change map and set gamemode to planning
+        let currentPlayer = players.get(playerId);
+        if (currentPlayer) {
+            currentPlayer.finishedSimulating = true;
+
+            if (playerId === getHostId()) {
+                setBallLocations(message.data);
+            }
+
+            const allPlayersFinished = Array.from(players.values()).every(
+                (player) => player.finishedSimulating,
+            );
+
+            if (allPlayersFinished) {
+                players.forEach((player) => {
+                    player.ready = false;
+                    player.finishedSimulating = false;
+                });
+
+                setGamestate(GameState.PLANNING);
+
+                console.log("broadcasting. Balllocations:", getBallLocations());
+
+                broadcast(
+                    {
+                        type: MessageTypeServer.GAME_STATE,
+                        data: {
+                            state: GameState.PLANNING,
+                            ballLocations: getBallLocations(),
+                        },
+                    },
+                    players,
+                );
+            }
+        }
     }
 }

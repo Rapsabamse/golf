@@ -1,6 +1,7 @@
 import * as Phaser from "phaser";
 import { GameMap } from "../../type/GameTypes";
-import { Player, ServerData } from "../../../server/types/types";
+import { BallLocation, Player, ServerData } from "../../../server/types/types";
+import { Network } from "../Networking/Network";
 
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
@@ -9,11 +10,14 @@ export interface Ball {
 
 export class BallManager {
     private balls = new Map<string, Ball>();
+    private isSimulating = false;
+    private isHost = false;
 
     constructor(
         private readonly scene: Phaser.Scene,
         private readonly gameMap: GameMap,
         private readonly getPlayerId: () => string,
+        private readonly network: Network,
     ) {}
 
     updateBalls(players: Player[]) {
@@ -69,6 +73,26 @@ export class BallManager {
         });
     }
 
+    updateBallLocations(ballLocations: BallLocation[]) {
+        for (const location of ballLocations) {
+            const ball = this.balls.get(location.playerId);
+
+            if (!ball) {
+                continue;
+            }
+
+            this.scene.matter.body.setPosition(ball.body, {
+                x: location.x,
+                y: location.y,
+            });
+
+            this.scene.matter.body.setVelocity(ball.body, {
+                x: 0,
+                y: 0,
+            });
+        }
+    }
+
     getOwnBall(): Ball | undefined {
         return this.balls.get(this.getPlayerId());
     }
@@ -79,9 +103,22 @@ export class BallManager {
 
             ball.visual.setRotation(ball.body.angle);
         }
+
+        if (this.isSimulating && this.areAllBallsStopped()) {
+            this.isSimulating = false;
+
+            if (this.isHost) {
+                this.network.sendSimulationResult(this.getBallPositions());
+            } else {
+                this.network.sendSimulationDone();
+            }
+        }
     }
 
-    simulateRound(data: Player[]) {
+    simulateRound(data: Player[], isHost: boolean) {
+        this.isSimulating = true;
+        this.isHost = isHost;
+
         //Go through each ball and add the velocity send by the server
         data.forEach((player) => {
             const ball = this.balls.get(player.id);
@@ -92,5 +129,25 @@ export class BallManager {
                 );
             }
         });
+    }
+
+    private getBallPositions(): BallLocation[] {
+        return Array.from(this.balls.entries()).map(([playerId, ball]) => ({
+            playerId,
+            x: ball.body.position.x,
+            y: ball.body.position.y,
+        }));
+    }
+
+    private areAllBallsStopped(): boolean {
+        const stopThreshold = 0.05;
+
+        for (const ball of this.balls.values()) {
+            if (ball.body.speed > stopThreshold) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

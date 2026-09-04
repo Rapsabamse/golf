@@ -59,7 +59,7 @@ export class Network {
         this.socket.send(JSON.stringify(message));
     }
 
-    ready() {
+    sendReady() {
         this.send({
             type: MessageTypeClient.READY,
         });
@@ -70,6 +70,14 @@ export class Network {
             type: MessageTypeClient.SHOT_SELECTED,
             data: direction,
         });
+    }
+
+    sendSimulationResult(balls: { playerId: string; x: number; y: number }[]) {
+        this.send({ type: MessageTypeClient.SIMULATION_DONE, data: balls });
+    }
+
+    sendSimulationDone() {
+        this.send({ type: MessageTypeClient.SIMULATION_DONE });
     }
 
     getPlayerId() {

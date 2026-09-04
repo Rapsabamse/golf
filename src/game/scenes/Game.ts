@@ -39,17 +39,28 @@ export class Game extends Phaser.Scene {
         this.network.onGameStateChange = (gamestate, data?) => {
             if (gamestate === GameState.PLANNING) {
                 this.aimController.updateCanInteract(true);
+
+                const recievedData: ServerData = data;
+                if (recievedData.ballLocations) {
+                    this.ballManager.updateBallLocations(
+                        recievedData.ballLocations,
+                    );
+                }
             } else {
                 this.aimController.updateCanInteract(false);
             }
 
-            if (gamestate === GameState.SIMULATING) {
+            if (
+                gamestate === GameState.SIMULATING ||
+                gamestate === GameState.SIMULATING_HOST
+            ) {
                 const recievedData: ServerData = data;
 
                 if (recievedData.playerList) {
-                    console.log("Playerdata: ", recievedData.playerList);
-
-                    this.ballManager.simulateRound(recievedData.playerList);
+                    this.ballManager.simulateRound(
+                        recievedData.playerList,
+                        gamestate === GameState.SIMULATING_HOST,
+                    );
                 }
             }
         };
@@ -59,8 +70,11 @@ export class Game extends Phaser.Scene {
         this.currentMap.create(this);
 
         //Create the ball manager
-        this.ballManager = new BallManager(this, this.currentMap, () =>
-            this.network.getPlayerId(),
+        this.ballManager = new BallManager(
+            this,
+            this.currentMap,
+            () => this.network.getPlayerId(),
+            this.network,
         );
 
         //Create inputs
@@ -86,6 +100,6 @@ export class Game extends Phaser.Scene {
     }
 
     public lockIn() {
-        this.network.ready();
+        this.network.sendReady();
     }
 }
