@@ -81,7 +81,6 @@ export class AimController {
             }
 
             this.isDragging = false;
-            this.aimLine.clear();
 
             const ball = this.getOwnBall();
 
@@ -93,10 +92,7 @@ export class AimController {
 
             const velocity = direction.scale(force * this.forceMultiplier);
 
-            //Send shot selected to network instead of setting velocity directly
             network.sendShot(velocity);
-
-            //this.scene.matter.body.setVelocity(ball.body, velocity);
         });
     }
 
@@ -110,8 +106,8 @@ export class AimController {
             };
         }
 
-        const dx = ball.visual.x - pointer.x;
-        const dy = ball.visual.y - pointer.y;
+        const dx = ball.visual.x - pointer.worldX;
+        const dy = ball.visual.y - pointer.worldY;
 
         const distance = Math.sqrt(dx * dx + dy * dy);
 
@@ -134,6 +130,10 @@ export class AimController {
 
     updateCanInteract(canInteranct: boolean) {
         this.canInteract = canInteranct;
+    }
+
+    clearAimline() {
+        this.aimLine.clear();
     }
 
     destroy() {

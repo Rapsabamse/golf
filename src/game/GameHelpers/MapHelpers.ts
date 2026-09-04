@@ -1,8 +1,10 @@
 import * as Phaser from "phaser";
 
-export function createCourseWalls(scene: Phaser.Scene) {
-    const width = scene.scale.width;
-    const height = scene.scale.height;
+export function createCourseWalls(
+    scene: Phaser.Scene,
+    mapWidth: number,
+    mapHeight: number,
+) {
     const thickness = 50;
 
     const wallOptions = {
@@ -10,35 +12,39 @@ export function createCourseWalls(scene: Phaser.Scene) {
         restitution: 0.8,
     };
 
+    // Top
     scene.matter.add.rectangle(
-        width / 2,
-        -thickness / 2,
-        width,
+        0,
+        -mapHeight / 2 - thickness / 2,
+        mapWidth + thickness * 2,
         thickness,
         wallOptions,
     );
 
+    // Bottom
     scene.matter.add.rectangle(
-        width / 2,
-        height + thickness / 2,
-        width,
+        0,
+        mapHeight / 2 + thickness / 2,
+        mapWidth + thickness * 2,
         thickness,
         wallOptions,
     );
 
+    // Left
     scene.matter.add.rectangle(
-        -thickness / 2,
-        height / 2,
+        -mapWidth / 2 - thickness / 2,
+        0,
         thickness,
-        height,
+        mapHeight + thickness * 2,
         wallOptions,
     );
 
+    // Right
     scene.matter.add.rectangle(
-        width + thickness / 2,
-        height / 2,
+        mapWidth / 2 + thickness / 2,
+        0,
         thickness,
-        height,
+        mapHeight + thickness * 2,
         wallOptions,
     );
 }

@@ -6,6 +6,7 @@ import { TestMap } from "../GameMaps/TestMap";
 import { GameState, ServerData } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
+import { GameUI } from "../GameComponents/UI";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -16,6 +17,7 @@ export class Game extends Phaser.Scene {
     private currentMap!: GameMap;
     private aimController!: AimController;
     private ballManager!: BallManager;
+    private ui!: GameUI;
 
     constructor() {
         super("Game");
@@ -24,6 +26,7 @@ export class Game extends Phaser.Scene {
     create() {
         this.camera = this.cameras.main;
         this.camera.setBackgroundColor(0x00ff00);
+        this.camera.setZoom(0.75);
 
         this.network = new Network();
         this.network.connect();
@@ -32,11 +35,19 @@ export class Game extends Phaser.Scene {
         this.network.onPlayerList = (players) => {
             if (this.network.isLobbyWaiting()) {
                 this.ballManager.updateBalls(players);
+
+                //Kameran ska följa bollen
+                const ownBall = this.ballManager.getOwnBall();
+                if (ownBall) {
+                    this.camera.startFollow(ownBall.visual);
+                }
             }
         };
 
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
+            this.ui.updateUI(gamestate);
+
             if (gamestate === GameState.PLANNING) {
                 this.aimController.updateCanInteract(true);
 
@@ -57,6 +68,8 @@ export class Game extends Phaser.Scene {
                 const recievedData: ServerData = data;
 
                 if (recievedData.playerList) {
+                    this.aimController.clearAimline();
+
                     this.ballManager.simulateRound(
                         recievedData.playerList,
                         gamestate === GameState.SIMULATING_HOST,
@@ -84,6 +97,9 @@ export class Game extends Phaser.Scene {
             this.network,
         );
 
+        //Create UI
+        this.ui = new GameUI(this, this.network, () => this.lockIn());
+
         EventBus.emit("current-scene-ready", this);
     }
 
@@ -95,11 +111,8 @@ export class Game extends Phaser.Scene {
         this.ballManager.update();
     }
 
-    public startGame() {
-        this.network.startGame();
-    }
-
-    public lockIn() {
+    lockIn() {
         this.network.sendReady();
+        this.aimController.updateCanInteract(false);
     }
 }

@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 import { GameMap } from "../../type/GameTypes";
-import { BallLocation, Player, ServerData } from "../../../server/types/types";
+import { BallLocation, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 
 export interface Ball {
@@ -42,14 +42,9 @@ export class BallManager {
             let ball = this.balls.get(player.id);
 
             if (!ball) {
-                const isOwnBall = player.id === this.getPlayerId();
-
-                const visual = this.scene.add.circle(
-                    position.x,
-                    position.y,
-                    15,
-                    isOwnBall ? 0xff69b4 : 0xffffff,
-                );
+                const visual = this.scene.add
+                    .circle(position.x, position.y, 15, 0xffffff)
+                    .setStrokeStyle(2, 0x444444);
 
                 const body = this.scene.matter.add.circle(
                     position.x,
