@@ -1,12 +1,12 @@
 import * as Phaser from "phaser";
 import { EventBus } from "../EventBus";
 import { Network } from "../Networking/Network";
-import { GameMap } from "../../type/GameTypes";
-import { TestMap } from "../GameMaps/TestMap";
 import { GameState, ServerData } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
+import { GeneratedMap, MapGenerator } from "../GameMaps/MapGenerator";
+import { tmpMap } from "../GameMaps/map_1";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -14,7 +14,7 @@ export class Game extends Phaser.Scene {
     gameText: Phaser.GameObjects.Text;
 
     private network!: Network;
-    private currentMap!: GameMap;
+    private currentMap!: GeneratedMap;
     private aimController!: AimController;
     private ballManager!: BallManager;
     private ui!: GameUI;
@@ -26,7 +26,7 @@ export class Game extends Phaser.Scene {
     create() {
         this.camera = this.cameras.main;
         this.camera.setBackgroundColor(0x00ff00);
-        this.camera.setZoom(0.75);
+        this.camera.setZoom(0.6);
 
         this.network = new Network();
         this.network.connect();
@@ -78,9 +78,9 @@ export class Game extends Phaser.Scene {
             }
         };
 
-        //Create a map
-        this.currentMap = new TestMap();
-        this.currentMap.create(this);
+        // Create map
+        const mapGenerator = new MapGenerator(25);
+        this.currentMap = mapGenerator.generate(this, tmpMap);
 
         //Create the ball manager
         this.ballManager = new BallManager(
@@ -89,6 +89,11 @@ export class Game extends Phaser.Scene {
             () => this.network.getPlayerId(),
             this.network,
         );
+
+        //Connect the ball entered goal event with hadleGoalReached on the ballmanager
+        this.currentMap.goal.setOnBallEntered((ballBody) => {
+            this.ballManager.handleGoalReached(ballBody);
+        });
 
         //Create inputs
         this.aimController = new AimController(

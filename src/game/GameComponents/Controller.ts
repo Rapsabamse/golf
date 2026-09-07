@@ -39,11 +39,6 @@ export class AimController {
                 return;
             }
 
-            // Don't allow another shot while the ball is moving
-            if (ball.body.speed > 0.1) {
-                return;
-            }
-
             this.isDragging = true;
         });
 

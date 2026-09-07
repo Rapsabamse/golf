@@ -135,7 +135,7 @@ export function handleMessages(
 
                 setGamestate(GameState.PLANNING);
 
-                console.log("broadcasting. Balllocations:", getBallLocations());
+                console.log("broadcasting balllocations");
 
                 broadcast(
                     {
@@ -149,5 +149,20 @@ export function handleMessages(
                 );
             }
         }
+    }
+
+    //Client says that they have completed the simulation of the last round
+    if (
+        message.type === MessageTypeClient.PLAYER_GOAL &&
+        gameState === GameState.SIMULATING
+    ) {
+        let currentPlayer = players.get(playerId);
+
+        // Only listen to hosts simulated goals
+        if (currentPlayer?.id != getHostId()) {
+            return;
+        }
+
+        console.log("Player ", message.data, " Scored!");
     }
 }

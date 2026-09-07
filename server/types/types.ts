@@ -5,6 +5,7 @@ export enum MessageTypeClient {
     READY,
     SIMULATION_DONE,
     SHOT_SELECTED,
+    PLAYER_GOAL,
 }
 
 export enum MessageTypeServer {
@@ -37,6 +38,7 @@ export interface PlayerState {
 export interface RoundState {
     position: Phaser.Math.Vector2;
     shots: number;
+    hasScored: boolean;
 }
 
 export interface PlayerShot {

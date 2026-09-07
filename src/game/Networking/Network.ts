@@ -80,6 +80,10 @@ export class Network {
         this.send({ type: MessageTypeClient.SIMULATION_DONE });
     }
 
+    sendGoalReached(playerId: string) {
+        this.send({ type: MessageTypeClient.PLAYER_GOAL, data: playerId });
+    }
+
     getPlayerId() {
         return this.playerId;
     }

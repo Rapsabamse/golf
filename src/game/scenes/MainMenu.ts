@@ -15,10 +15,10 @@ export class MainMenu extends Scene {
     }
 
     create() {
-        this.background = this.add.image(512, 384, "background");
+        this.background = this.add.image(512, 384, "background").setScale(1.3);
 
         this.logo = this.add
-            .image(512, 250, "logo")
+            .image(640, 250, "logo")
             .setDepth(100)
             .setScale(0.45);
 
@@ -29,7 +29,7 @@ export class MainMenu extends Scene {
 
     private createJoinButton() {
         this.joinButton = this.add
-            .text(512, 450, "Join Game", {
+            .text(640, 500, "Join Game", {
                 fontFamily: "Arial Black",
                 fontSize: 32,
                 color: "#ffffff",
@@ -61,40 +61,6 @@ export class MainMenu extends Scene {
         }
 
         this.scene.start("Game");
-    }
-
-    moveLogo(vueCallback: ({ x, y }: { x: number; y: number }) => void) {
-        if (this.logoTween) {
-            if (this.logoTween.isPlaying()) {
-                this.logoTween.pause();
-            } else {
-                this.logoTween.play();
-            }
-        } else {
-            this.logoTween = this.tweens.add({
-                targets: this.logo,
-                x: {
-                    value: 750,
-                    duration: 3000,
-                    ease: "Back.easeInOut",
-                },
-                y: {
-                    value: 80,
-                    duration: 1500,
-                    ease: "Sine.easeOut",
-                },
-                yoyo: true,
-                repeat: -1,
-                onUpdate: () => {
-                    if (vueCallback) {
-                        vueCallback({
-                            x: Math.floor(this.logo.x),
-                            y: Math.floor(this.logo.y),
-                        });
-                    }
-                },
-            });
-        }
     }
 }
 

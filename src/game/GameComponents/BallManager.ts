@@ -2,11 +2,14 @@ import * as Phaser from "phaser";
 import { GameMap } from "../../type/GameTypes";
 import { BallLocation, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
+import { GeneratedMap } from "../GameMaps/MapGenerator";
 
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
     body: MatterJS.BodyType;
 }
+
+const BALLRADIUS = 12;
 
 export class BallManager {
     private balls = new Map<string, Ball>();
@@ -15,7 +18,7 @@ export class BallManager {
 
     constructor(
         private readonly scene: Phaser.Scene,
-        private readonly gameMap: GameMap,
+        private readonly gameMap: GeneratedMap,
         private readonly getPlayerId: () => string,
         private readonly network: Network,
     ) {}
@@ -43,13 +46,13 @@ export class BallManager {
 
             if (!ball) {
                 const visual = this.scene.add
-                    .circle(position.x, position.y, 15, 0xffffff)
+                    .circle(position.x, position.y, BALLRADIUS, 0xffffff)
                     .setStrokeStyle(2, 0x444444);
 
                 const body = this.scene.matter.add.circle(
                     position.x,
                     position.y,
-                    15,
+                    BALLRADIUS,
                     {
                         restitution: 0.8,
                         friction: 0.1,
@@ -124,6 +127,19 @@ export class BallManager {
                 );
             }
         });
+    }
+
+    handleGoalReached(ballBody: MatterJS.BodyType) {
+        for (const [playerId, ball] of this.balls) {
+            if (ball.body === ballBody) {
+                console.log("Player reached goal:", playerId);
+
+                this.network.sendGoalReached(playerId);
+                return;
+            }
+        }
+
+        console.warn("Goal reached by unknown ball");
     }
 
     private getBallPositions(): BallLocation[] {
