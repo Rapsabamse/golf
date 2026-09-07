@@ -11,6 +11,7 @@ export class GameUI {
         private scene: Phaser.Scene,
         private network: Network,
         private lockIn: () => void,
+        private haveIScored: () => boolean,
     ) {
         this.create();
     }
@@ -65,15 +66,25 @@ export class GameUI {
     updateUI(gameState: GameState) {
         switch (gameState) {
             case GameState.PLANNING:
-                this.gameStateTextTitle.setText("Planning");
-                this.gameStateTextSubtitle.setText("Plan your next shot");
+                if (this.haveIScored()) {
+                    this.gameStateTextTitle.setText("You have scored!");
+                    this.gameStateTextSubtitle.setText(
+                        "Please wait for all\nother players to score.",
+                    );
 
-                this.gameStateButton
-                    .setText("Lock In")
-                    .removeAllListeners("pointerdown")
-                    .on("pointerdown", () => this.lockIn());
+                    this.gameStateButton.visible = false;
+                } else {
+                    this.gameStateTextTitle.setText("Planning");
+                    this.gameStateTextSubtitle.setText("Plan your next shot");
 
-                this.gameStateButton.visible = true;
+                    this.gameStateButton
+                        .setText("Lock In")
+                        .removeAllListeners("pointerdown")
+                        .on("pointerdown", () => this.lockIn());
+
+                    this.gameStateButton.visible = true;
+                }
+
                 this.gameStateBackground.visible = true;
 
                 this.resizeGameStateBackground();

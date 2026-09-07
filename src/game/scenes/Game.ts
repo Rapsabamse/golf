@@ -19,6 +19,8 @@ export class Game extends Phaser.Scene {
     private ballManager!: BallManager;
     private ui!: GameUI;
 
+    private scoredPlayers: string[] = [];
+
     constructor() {
         super("Game");
     }
@@ -49,14 +51,20 @@ export class Game extends Phaser.Scene {
             this.ui.updateUI(gamestate);
 
             if (gamestate === GameState.PLANNING) {
-                this.aimController.updateCanInteract(true);
-
                 const recievedData: ServerData = data;
                 if (recievedData.ballLocations) {
                     this.ballManager.updateBallLocations(
                         recievedData.ballLocations,
                     );
                 }
+
+                if (recievedData.scoringPlayers) {
+                    this.scoredPlayers = recievedData.scoringPlayers;
+                    this.ballManager.updateScoringPlayers();
+                    this.ui.updateUI(gamestate);
+                }
+
+                this.aimController.updateCanInteract(!this.haveIScored());
             } else {
                 this.aimController.updateCanInteract(false);
             }
@@ -88,6 +96,7 @@ export class Game extends Phaser.Scene {
             this.currentMap,
             () => this.network.getPlayerId(),
             this.network,
+            () => this.getScoringPlayers(),
         );
 
         //Connect the ball entered goal event with hadleGoalReached on the ballmanager
@@ -103,7 +112,12 @@ export class Game extends Phaser.Scene {
         );
 
         //Create UI
-        this.ui = new GameUI(this, this.network, () => this.lockIn());
+        this.ui = new GameUI(
+            this,
+            this.network,
+            () => this.lockIn(),
+            () => this.haveIScored(),
+        );
 
         EventBus.emit("current-scene-ready", this);
     }
@@ -119,5 +133,13 @@ export class Game extends Phaser.Scene {
     lockIn() {
         this.network.sendReady();
         this.aimController.updateCanInteract(false);
+    }
+
+    haveIScored() {
+        return this.scoredPlayers.includes(this.network.getPlayerId());
+    }
+
+    private getScoringPlayers() {
+        return this.scoredPlayers;
     }
 }

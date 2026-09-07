@@ -19,14 +19,10 @@ export function handleMessages(
     getHostId: () => string | undefined,
     setBallLocations: (newBallLocations: BallLocation[]) => void,
     getBallLocations: () => BallLocation[],
+    initRound: () => void,
+    getScoringPlayers: () => string[],
 ) {
     const message = JSON.parse(data.toString());
-
-    console.log(
-        "Client message: ",
-        MessageTypeClient[message.type],
-        GameState[gameState],
-    );
 
     //A client tries to start the game
     if (
@@ -40,6 +36,7 @@ export function handleMessages(
         }
 
         setGamestate(GameState.PLANNING);
+        initRound();
 
         broadcast(
             {
@@ -78,9 +75,9 @@ export function handleMessages(
             currentPlayer.ready = true;
             players.set(playerId, currentPlayer);
 
-            const allPlayersReady = Array.from(players.values()).every(
-                (player) => player.ready,
-            );
+            const allPlayersReady = Array.from(players.values())
+                .filter((player) => !player.roundState?.hasScored)
+                .every((player) => player.ready);
 
             if (allPlayersReady) {
                 setGamestate(GameState.SIMULATING);
@@ -106,6 +103,13 @@ export function handleMessages(
                 );
 
                 console.log("Sending simulation data to clients");
+
+                // Increment shots for players who havent scored
+                players.forEach((player) => {
+                    if (!player.roundState!.hasScored) {
+                        player.roundState!.shots += 1;
+                    }
+                });
             }
         }
     }
@@ -119,15 +123,12 @@ export function handleMessages(
         if (currentPlayer) {
             currentPlayer.finishedSimulating = true;
 
+            console.log("Recieved simulation done from:", playerId);
+
             if (playerId === getHostId()) {
+                console.log("Recieved simulation done from host");
                 setBallLocations(message.data);
-            }
 
-            const allPlayersFinished = Array.from(players.values()).every(
-                (player) => player.finishedSimulating,
-            );
-
-            if (allPlayersFinished) {
                 players.forEach((player) => {
                     player.ready = false;
                     player.finishedSimulating = false;
@@ -143,6 +144,7 @@ export function handleMessages(
                         data: {
                             state: GameState.PLANNING,
                             ballLocations: getBallLocations(),
+                            scoringPlayers: getScoringPlayers(),
                         },
                     },
                     players,
@@ -156,13 +158,17 @@ export function handleMessages(
         message.type === MessageTypeClient.PLAYER_GOAL &&
         gameState === GameState.SIMULATING
     ) {
-        let currentPlayer = players.get(playerId);
-
         // Only listen to hosts simulated goals
-        if (currentPlayer?.id != getHostId()) {
+        if (playerId != getHostId()) {
             return;
         }
 
-        console.log("Player ", message.data, " Scored!");
+        const scoringPlayer = players.get(message.data);
+        if (scoringPlayer && scoringPlayer.roundState?.hasScored === false) {
+            scoringPlayer.roundState!.hasScored = true;
+            scoringPlayer.state.points = scoringPlayer.roundState!.shots;
+
+            console.log("Player ", message.data, " Scored!");
+        }
     }
 }

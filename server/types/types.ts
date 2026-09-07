@@ -36,7 +36,7 @@ export interface PlayerState {
 }
 
 export interface RoundState {
-    position: Phaser.Math.Vector2;
+    position?: Phaser.Math.Vector2;
     shots: number;
     hasScored: boolean;
 }
@@ -56,6 +56,7 @@ export interface ServerData {
     playerId?: string;
     playerList?: Player[];
     ballLocations?: BallLocation[];
+    scoringPlayers?: string[];
 }
 
 export interface BallLocation {

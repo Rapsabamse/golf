@@ -40,6 +40,8 @@ wss.on("connection", (socket: WebSocket) => {
             getHostId,
             setBallLocations,
             getBallLocations,
+            initRound,
+            getScoringPlayers,
         );
     });
 
@@ -59,7 +61,7 @@ function setGamestate(newGamestate: GameState) {
     gameState = newGamestate;
 }
 
-function setHostId(id: string) {
+function setHostId(id: string | undefined) {
     hostId = id;
     console.log(`Set new host. Id: `, id);
 }
@@ -74,4 +76,23 @@ function getBallLocations() {
 
 function setBallLocations(newBallLocations: BallLocation[]) {
     ballLocations = newBallLocations;
+}
+
+function initRound() {
+    players.forEach((player) => {
+        player.roundState = { shots: 0, hasScored: false };
+    });
+}
+
+function getScoringPlayers() {
+    let scoredPlayersList: string[] = [];
+    players.forEach((player) => {
+        if (player.roundState?.hasScored) {
+            scoredPlayersList.push(player.id);
+        }
+    });
+
+    console.log(scoredPlayersList);
+
+    return scoredPlayersList;
 }

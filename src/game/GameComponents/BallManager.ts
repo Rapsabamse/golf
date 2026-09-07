@@ -1,5 +1,4 @@
 import * as Phaser from "phaser";
-import { GameMap } from "../../type/GameTypes";
 import { BallLocation, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 import { GeneratedMap } from "../GameMaps/MapGenerator";
@@ -21,6 +20,7 @@ export class BallManager {
         private readonly gameMap: GeneratedMap,
         private readonly getPlayerId: () => string,
         private readonly network: Network,
+        private readonly getScoringPlayers: () => string[],
     ) {}
 
     updateBalls(players: Player[]) {
@@ -91,6 +91,20 @@ export class BallManager {
         }
     }
 
+    updateScoringPlayers() {
+        for (const [playerId, ball] of this.balls) {
+            const hasScored = this.getScoringPlayers().includes(playerId);
+
+            ball.visual.setVisible(!hasScored);
+
+            if (hasScored) {
+                this.scene.matter.world.remove(ball.body);
+            } else {
+                this.scene.matter.world.add(ball.body);
+            }
+        }
+    }
+
     getOwnBall(): Ball | undefined {
         return this.balls.get(this.getPlayerId());
     }
@@ -106,6 +120,8 @@ export class BallManager {
             this.isSimulating = false;
 
             if (this.isHost) {
+                console.log("Sending result");
+
                 this.network.sendSimulationResult(this.getBallPositions());
             } else {
                 this.network.sendSimulationDone();
@@ -152,12 +168,19 @@ export class BallManager {
 
     private areAllBallsStopped(): boolean {
         const stopThreshold = 0.05;
+        const playersWhoScored = this.getScoringPlayers();
 
-        for (const ball of this.balls.values()) {
+        for (const [playerId, ball] of this.balls) {
+            if (playersWhoScored.includes(playerId)) {
+                continue;
+            }
+
             if (ball.body.speed > stopThreshold) {
                 return false;
             }
         }
+
+        console.log("all balls stopped!");
 
         return true;
     }
