@@ -123,10 +123,7 @@ export function handleMessages(
         if (currentPlayer) {
             currentPlayer.finishedSimulating = true;
 
-            console.log("Recieved simulation done from:", playerId);
-
             if (playerId === getHostId()) {
-                console.log("Recieved simulation done from host");
                 setBallLocations(message.data);
 
                 players.forEach((player) => {
@@ -136,7 +133,7 @@ export function handleMessages(
 
                 setGamestate(GameState.PLANNING);
 
-                console.log("broadcasting balllocations");
+                console.log("broadcasting ball-locations");
 
                 broadcast(
                     {
@@ -168,7 +165,12 @@ export function handleMessages(
             scoringPlayer.roundState!.hasScored = true;
             scoringPlayer.state.points = scoringPlayer.roundState!.shots;
 
-            console.log("Player ", message.data, " Scored!");
+            console.log(
+                "Player ",
+                message.data,
+                " Scored! Shots needed:",
+                scoringPlayer.roundState.shots,
+            );
         }
     }
 }

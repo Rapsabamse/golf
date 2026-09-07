@@ -6,6 +6,7 @@ import { GeneratedMap } from "../GameMaps/MapGenerator";
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
     body: MatterJS.BodyType;
+    inWorld: boolean;
 }
 
 const BALLRADIUS = 12;
@@ -60,7 +61,7 @@ export class BallManager {
                     },
                 );
 
-                ball = { visual, body };
+                ball = { visual, body, inWorld: true };
 
                 this.balls.set(player.id, ball);
             }
@@ -92,15 +93,23 @@ export class BallManager {
     }
 
     updateScoringPlayers() {
+        const scoringPlayers = this.getScoringPlayers();
+
         for (const [playerId, ball] of this.balls) {
-            const hasScored = this.getScoringPlayers().includes(playerId);
+            const hasScored = scoringPlayers.includes(playerId);
 
             ball.visual.setVisible(!hasScored);
 
             if (hasScored) {
-                this.scene.matter.world.remove(ball.body);
+                if (ball.inWorld) {
+                    this.scene.matter.world.remove(ball.body);
+                    ball.inWorld = false;
+                }
             } else {
-                this.scene.matter.world.add(ball.body);
+                if (!ball.inWorld) {
+                    this.scene.matter.world.add(ball.body);
+                    ball.inWorld = true;
+                }
             }
         }
     }
@@ -150,6 +159,13 @@ export class BallManager {
             if (ball.body === ballBody) {
                 console.log("Player reached goal:", playerId);
 
+                ball.visual.setVisible(false);
+
+                if (ball.inWorld) {
+                    this.scene.matter.world.remove(ball.body);
+                    ball.inWorld = false;
+                }
+
                 this.network.sendGoalReached(playerId);
                 return;
             }
@@ -171,7 +187,7 @@ export class BallManager {
         const playersWhoScored = this.getScoringPlayers();
 
         for (const [playerId, ball] of this.balls) {
-            if (playersWhoScored.includes(playerId)) {
+            if (playersWhoScored.includes(playerId) || !ball.inWorld) {
                 continue;
             }
 
