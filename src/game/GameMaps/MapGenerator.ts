@@ -44,18 +44,6 @@ export class MapGenerator {
                 const worldY = y * this.tileSize + this.tileSize / 2;
 
                 switch (tile) {
-                    case "x": {
-                        const { visual, body } = this.createWall(
-                            scene,
-                            worldX,
-                            worldY,
-                        );
-
-                        objects.push(visual);
-                        bodies.push(body);
-                        break;
-                    }
-
                     case "g":
                         goalPosition = new Phaser.Math.Vector2(worldX, worldY);
                         break;
@@ -72,6 +60,8 @@ export class MapGenerator {
                 }
             }
         }
+
+        this.createWalls(scene, map, objects, bodies);
 
         if (!goalPosition) {
             throw new Error("Map does not contain a goal");
@@ -103,6 +93,87 @@ export class MapGenerator {
                 goal.destroy();
             },
         };
+    }
+
+    private createWalls(
+        scene: Phaser.Scene,
+        map: string[],
+        objects: Phaser.GameObjects.GameObject[],
+        bodies: MatterJS.BodyType[],
+    ) {
+        const height = map.length;
+        const width = map[0].length;
+
+        const processed = map.map(() => Array(width).fill(false));
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (map[y][x] !== "x" || processed[y][x]) {
+                    continue;
+                }
+
+                // Find the maximum horizontal width.
+                let rectangleWidth = 1;
+
+                while (
+                    x + rectangleWidth < width &&
+                    map[y][x + rectangleWidth] === "x" &&
+                    !processed[y][x + rectangleWidth]
+                ) {
+                    rectangleWidth++;
+                }
+
+                // Find the maximum height for that width.
+                let rectangleHeight = 1;
+
+                while (y + rectangleHeight < height) {
+                    let canExpand = true;
+
+                    for (let dx = 0; dx < rectangleWidth; dx++) {
+                        if (
+                            map[y + rectangleHeight][x + dx] !== "x" ||
+                            processed[y + rectangleHeight][x + dx]
+                        ) {
+                            canExpand = false;
+                            break;
+                        }
+                    }
+
+                    if (!canExpand) {
+                        break;
+                    }
+
+                    rectangleHeight++;
+                }
+
+                // Mark all tiles covered by this rectangle.
+                for (let dy = 0; dy < rectangleHeight; dy++) {
+                    for (let dx = 0; dx < rectangleWidth; dx++) {
+                        processed[y + dy][x + dx] = true;
+                    }
+                }
+
+                const worldX = (x + rectangleWidth / 2) * this.tileSize;
+
+                const worldY = (y + rectangleHeight / 2) * this.tileSize;
+
+                const rectangleWorldWidth = rectangleWidth * this.tileSize;
+
+                const rectangleWorldHeight = rectangleHeight * this.tileSize;
+
+                const { visual, body } = createRectangle(
+                    scene,
+                    worldX,
+                    worldY,
+                    rectangleWorldWidth,
+                    rectangleWorldHeight,
+                    0xffffff,
+                );
+
+                objects.push(visual);
+                bodies.push(body);
+            }
+        }
     }
 
     private createSpawnLine(map: string[]): SpawnLine {

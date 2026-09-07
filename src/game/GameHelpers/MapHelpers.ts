@@ -61,7 +61,7 @@ export function createRectangle(
 
     const body = scene.matter.add.rectangle(x, y, width, height, {
         isStatic: true,
-        restitution: 0.8,
+        restitution: 1,
     });
 
     return {

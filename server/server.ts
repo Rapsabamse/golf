@@ -15,6 +15,7 @@ const players = new Map<string, Player>();
 let gameState = GameState.WAITING;
 let hostId: string | undefined;
 let ballLocations: BallLocation[] = [];
+const playersReady = new Set<string>();
 
 console.log(`WebSocket server running on port ${PORT}`);
 
@@ -40,8 +41,8 @@ wss.on("connection", (socket: WebSocket) => {
             getHostId,
             setBallLocations,
             getBallLocations,
-            initRound,
             getScoringPlayers,
+            playersReady,
         );
     });
 
@@ -76,12 +77,6 @@ function getBallLocations() {
 
 function setBallLocations(newBallLocations: BallLocation[]) {
     ballLocations = newBallLocations;
-}
-
-function initRound() {
-    players.forEach((player) => {
-        player.roundState = { shots: 0, hasScored: false };
-    });
 }
 
 function getScoringPlayers() {

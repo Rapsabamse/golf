@@ -26,15 +26,14 @@ export enum GameState {
 export interface Player {
     id: string;
     socket?: WebSocket;
-    ready?: boolean;
-    finishedSimulating?: boolean;
     state?: PlayerState;
     roundState?: RoundState;
     shot?: PlayerShot;
+    waitingForNextRound?: boolean;
 }
 
 export interface PlayerState {
-    points: number;
+    points: number[];
 }
 
 export interface RoundState {

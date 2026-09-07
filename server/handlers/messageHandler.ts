@@ -19,8 +19,8 @@ export function handleMessages(
     getHostId: () => string | undefined,
     setBallLocations: (newBallLocations: BallLocation[]) => void,
     getBallLocations: () => BallLocation[],
-    initRound: () => void,
     getScoringPlayers: () => string[],
+    playersReady: Set<string>,
 ) {
     const message = JSON.parse(data.toString());
 
@@ -36,7 +36,14 @@ export function handleMessages(
         }
 
         setGamestate(GameState.PLANNING);
-        initRound();
+
+        players.forEach((player) => {
+            player.roundState = {
+                shots: 0,
+                hasScored: false,
+            };
+            player.waitingForNextRound = false;
+        });
 
         broadcast(
             {
@@ -70,47 +77,53 @@ export function handleMessages(
         message.type === MessageTypeClient.READY &&
         gameState === GameState.PLANNING
     ) {
-        let currentPlayer = players.get(playerId);
-        if (currentPlayer) {
-            currentPlayer.ready = true;
-            players.set(playerId, currentPlayer);
+        playersReady.add(playerId);
 
-            const allPlayersReady = Array.from(players.values())
-                .filter((player) => !player.roundState?.hasScored)
-                .every((player) => player.ready);
+        const allPlayersReady = Array.from(players.values())
+            .filter(
+                (player) =>
+                    !player.waitingForNextRound &&
+                    !player.roundState?.hasScored,
+            )
+            .every((player) => playersReady.has(player.id));
 
-            if (allPlayersReady) {
-                setGamestate(GameState.SIMULATING);
+        if (!allPlayersReady) {
+            return;
+        }
 
-                const playerList = Array.from(players.values()).map(
-                    (player) => ({
-                        id: player.id,
-                        shot: player.shot,
-                    }),
-                );
+        playersReady.clear();
 
-                broadcast(
-                    {
-                        type: MessageTypeServer.GAME_STATE,
-                        data: {
-                            state: getHostId()
-                                ? GameState.SIMULATING_HOST
-                                : GameState.SIMULATING,
-                            playerList: playerList,
-                        } as ServerData,
-                    },
-                    players,
-                );
+        if (allPlayersReady) {
+            setGamestate(GameState.SIMULATING);
 
-                console.log("Sending simulation data to clients");
+            const playerList = Array.from(players.values()).map((player) => ({
+                id: player.id,
+                shot: player.shot,
+            }));
 
-                // Increment shots for players who havent scored
-                players.forEach((player) => {
-                    if (!player.roundState!.hasScored) {
-                        player.roundState!.shots += 1;
-                    }
-                });
-            }
+            broadcast(
+                {
+                    type: MessageTypeServer.GAME_STATE,
+                    data: {
+                        state: getHostId()
+                            ? GameState.SIMULATING_HOST
+                            : GameState.SIMULATING,
+                        playerList: playerList,
+                    } as ServerData,
+                },
+                players,
+            );
+
+            console.log("Sending simulation data to clients");
+
+            // Increment shots for players who havent scored
+            // Reset the shots for all players
+            players.forEach((player) => {
+                if (player.roundState && !player.roundState.hasScored) {
+                    player.roundState!.shots += 1;
+                }
+                player.shot = undefined;
+            });
         }
     }
 
@@ -119,38 +132,28 @@ export function handleMessages(
         message.type === MessageTypeClient.SIMULATION_DONE &&
         gameState === GameState.SIMULATING
     ) {
-        let currentPlayer = players.get(playerId);
-        if (currentPlayer) {
-            currentPlayer.finishedSimulating = true;
+        if (playerId === getHostId()) {
+            setBallLocations(message.data);
 
-            if (playerId === getHostId()) {
-                setBallLocations(message.data);
+            setGamestate(GameState.PLANNING);
 
-                players.forEach((player) => {
-                    player.ready = false;
-                    player.finishedSimulating = false;
-                });
+            console.log("broadcasting ball-locations");
 
-                setGamestate(GameState.PLANNING);
-
-                console.log("broadcasting ball-locations");
-
-                broadcast(
-                    {
-                        type: MessageTypeServer.GAME_STATE,
-                        data: {
-                            state: GameState.PLANNING,
-                            ballLocations: getBallLocations(),
-                            scoringPlayers: getScoringPlayers(),
-                        },
+            broadcast(
+                {
+                    type: MessageTypeServer.GAME_STATE,
+                    data: {
+                        state: GameState.PLANNING,
+                        ballLocations: getBallLocations(),
+                        scoringPlayers: getScoringPlayers(),
                     },
-                    players,
-                );
-            }
+                },
+                players,
+            );
         }
     }
 
-    //Client says that they have completed the simulation of the last round
+    //Client says that a player has went into the hole
     if (
         message.type === MessageTypeClient.PLAYER_GOAL &&
         gameState === GameState.SIMULATING
@@ -163,7 +166,7 @@ export function handleMessages(
         const scoringPlayer = players.get(message.data);
         if (scoringPlayer && scoringPlayer.roundState?.hasScored === false) {
             scoringPlayer.roundState!.hasScored = true;
-            scoringPlayer.state!.points += scoringPlayer.roundState!.shots;
+            scoringPlayer.state!.points.push(scoringPlayer.roundState!.shots);
 
             console.log(
                 "Player ",
@@ -175,13 +178,23 @@ export function handleMessages(
 
         let roundComplete = true;
         players.forEach((player) => {
-            if (roundComplete && !player.roundState?.hasScored) {
-                roundComplete = false;
+            if (!player.waitingForNextRound) {
+                if (roundComplete && !player.roundState?.hasScored) {
+                    roundComplete = false;
+                }
             }
         });
 
         //If all players have scored, start a new round
         if (roundComplete) {
+            players.forEach((player) => {
+                player.roundState = {
+                    shots: 0,
+                    hasScored: false,
+                };
+                player.waitingForNextRound = false;
+            });
+
             /**
              * Send to clients that the round is complete.
              */
@@ -196,7 +209,7 @@ export function handleMessages(
                 },
                 players,
             );
-            initRound();
+
             setGamestate(GameState.ROUND_COMPLETE);
         }
     }
@@ -206,17 +219,19 @@ export function handleMessages(
         message.type === MessageTypeClient.LOADED_NEW_MAP &&
         gameState === GameState.ROUND_COMPLETE
     ) {
-        /**
-         * Send to clients that they can start planning their shots
-         */
-        broadcast(
-            {
-                type: MessageTypeServer.GAME_STATE,
-                data: { state: GameState.PLANNING },
-            },
-            players,
-        );
+        if (playerId === getHostId()) {
+            /**
+             * Send to clients that they can start planning their shots
+             */
+            broadcast(
+                {
+                    type: MessageTypeServer.GAME_STATE,
+                    data: { state: GameState.PLANNING },
+                },
+                players,
+            );
 
-        setGamestate(GameState.PLANNING);
+            setGamestate(GameState.PLANNING);
+        }
     }
 }

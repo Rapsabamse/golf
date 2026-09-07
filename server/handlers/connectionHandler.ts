@@ -13,9 +13,8 @@ export function handleConnection(
     const player: Player = {
         id: playerId,
         socket,
-        ready: false,
-        finishedSimulating: false,
-        state: { points: 0 },
+        state: { points: [] },
+        waitingForNextRound: gameState != GameState.WAITING,
     };
 
     players.set(playerId, player);

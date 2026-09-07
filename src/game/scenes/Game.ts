@@ -6,7 +6,7 @@ import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
 import { GeneratedMap, MapGenerator } from "../GameMaps/MapGenerator";
-import { map1, map2 } from "../GameMaps/maps";
+import { getNextMap } from "../GameMaps/maps";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -48,8 +48,6 @@ export class Game extends Phaser.Scene {
 
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
-            this.ui.updateUI(gamestate);
-
             if (gamestate === GameState.PLANNING) {
                 const recievedData: ServerData = data;
                 if (recievedData.ballLocations) {
@@ -61,7 +59,6 @@ export class Game extends Phaser.Scene {
                 if (recievedData.scoringPlayers) {
                     this.scoredPlayers = recievedData.scoringPlayers;
                     this.ballManager.updateScoringPlayers();
-                    this.ui.updateUI(gamestate);
                 }
 
                 this.aimController.updateCanInteract(!this.haveIScored());
@@ -88,16 +85,23 @@ export class Game extends Phaser.Scene {
             if (gamestate === GameState.ROUND_COMPLETE) {
                 const recievedData: ServerData = data;
 
+                //Resetta vilka som har gjort mål
+                this.scoredPlayers = [];
+
                 //Vi ska visa tabell på standings
                 //Just nu så går vi bara direkt till den nya kartan
 
                 //Destroy the old map and generate a new one
                 this.currentMap.destroy();
 
-                this.currentMap = mapGenerator.generate(this, map2);
+                this.currentMap = mapGenerator.generate(this, getNextMap());
 
                 this.ballManager.setMap(this.currentMap);
                 this.ballManager.updateBalls(recievedData.playerList!, true);
+
+                this.currentMap.goal.setOnBallEntered((ballBody) => {
+                    this.ballManager.handleGoalReached(ballBody);
+                });
 
                 //Kameran ska följa bollen
                 const ownBall = this.ballManager.getOwnBall();
@@ -108,11 +112,13 @@ export class Game extends Phaser.Scene {
                 //Tell the server that we have created the new map
                 this.network.sendMapLoaded();
             }
+
+            this.ui.updateUI(gamestate);
         };
 
         // Create map
-        const mapGenerator = new MapGenerator(25);
-        this.currentMap = mapGenerator.generate(this, map1);
+        const mapGenerator = new MapGenerator(40);
+        this.currentMap = mapGenerator.generate(this, getNextMap());
 
         //Create the ball manager
         this.ballManager = new BallManager(
