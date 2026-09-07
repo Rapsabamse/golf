@@ -17,7 +17,10 @@ export class GameUI {
     }
 
     private create() {
-        this.gameStateBackground = this.scene.add.graphics().setScrollFactor(0);
+        this.gameStateBackground = this.scene.add
+            .graphics()
+            .setScrollFactor(0)
+            .setDepth(100);
 
         this.gameStateTextTitle = this.scene.add
             .text(20, 20, "", {
@@ -25,7 +28,8 @@ export class GameUI {
                 color: "#ffffff",
                 fontStyle: "bold",
             })
-            .setScrollFactor(0);
+            .setScrollFactor(0)
+            .setDepth(101);
 
         this.gameStateTextSubtitle = this.scene.add
             .text(20, 60, "", {
@@ -33,7 +37,8 @@ export class GameUI {
                 color: "#ffffff",
                 fontStyle: "bold",
             })
-            .setScrollFactor(0);
+            .setScrollFactor(0)
+            .setDepth(101);
 
         this.gameStateButton = this.scene.add
             .text(20, 120, "", {
@@ -49,7 +54,8 @@ export class GameUI {
                 },
             })
             .setScrollFactor(0)
-            .setInteractive({ useHandCursor: true });
+            .setInteractive({ useHandCursor: true })
+            .setDepth(101);
 
         this.gameStateButton.on("pointerover", () => {
             this.gameStateButton.setBackgroundColor("#555555");

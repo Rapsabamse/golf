@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 
 export class Goal {
     private readonly body: MatterJS.BodyType;
+    private readonly visual: Phaser.GameObjects.Arc;
 
     private onBallEntered?: (ballBody: MatterJS.BodyType) => void;
 
@@ -10,7 +11,9 @@ export class Goal {
         readonly position: Phaser.Math.Vector2,
     ) {
         // Visual
-        scene.add.circle(position.x, position.y, 15, 0x000000).setDepth(1);
+        this.visual = scene.add
+            .circle(position.x, position.y, 15, 0x000000)
+            .setDepth(1);
 
         // Physics sensor
         this.body = scene.matter.add.circle(position.x, position.y, 15, {
@@ -42,4 +45,11 @@ export class Goal {
             }
         }
     };
+
+    destroy() {
+        this.scene.matter.world.off("collisionstart", this.handleCollision);
+
+        this.scene.matter.world.remove(this.body);
+        this.visual.destroy();
+    }
 }

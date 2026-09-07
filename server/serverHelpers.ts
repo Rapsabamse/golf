@@ -7,15 +7,12 @@ export function broadcast(
     const data = JSON.stringify(message);
 
     for (const player of players.values()) {
-        player.socket.send(data);
+        player.socket!.send(data);
     }
 }
 
 export function sendPlayerList(players: Map<string, Player>) {
-    const playerList = Array.from(players.values()).map((player) => ({
-        id: player.id,
-        ready: player.ready,
-    }));
+    const playerList = getPlayersList(players);
 
     const message = JSON.stringify({
         type: MessageTypeServer.PLAYER_LIST,
@@ -23,6 +20,13 @@ export function sendPlayerList(players: Map<string, Player>) {
     });
 
     for (const player of players.values()) {
-        player.socket.send(message);
+        player.socket!.send(message);
     }
+}
+
+export function getPlayersList(players: Map<string, Player>) {
+    return Array.from(players.values()).map((player) => ({
+        id: player.id,
+        ready: player.ready,
+    }));
 }

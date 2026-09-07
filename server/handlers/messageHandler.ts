@@ -6,7 +6,7 @@ import {
     Player,
     ServerData,
 } from "../types/types";
-import { broadcast } from "../serverHelpers";
+import { broadcast, getPlayersList } from "../serverHelpers";
 import { WebSocket } from "ws";
 import Phaser from "phaser";
 
@@ -163,7 +163,7 @@ export function handleMessages(
         const scoringPlayer = players.get(message.data);
         if (scoringPlayer && scoringPlayer.roundState?.hasScored === false) {
             scoringPlayer.roundState!.hasScored = true;
-            scoringPlayer.state.points = scoringPlayer.roundState!.shots;
+            scoringPlayer.state!.points += scoringPlayer.roundState!.shots;
 
             console.log(
                 "Player ",
@@ -172,5 +172,51 @@ export function handleMessages(
                 scoringPlayer.roundState.shots,
             );
         }
+
+        let roundComplete = true;
+        players.forEach((player) => {
+            if (roundComplete && !player.roundState?.hasScored) {
+                roundComplete = false;
+            }
+        });
+
+        //If all players have scored, start a new round
+        if (roundComplete) {
+            /**
+             * Send to clients that the round is complete.
+             */
+            broadcast(
+                {
+                    type: MessageTypeServer.GAME_STATE,
+                    data: {
+                        state: GameState.ROUND_COMPLETE,
+                        playerData: players,
+                        playerList: getPlayersList(players),
+                    },
+                },
+                players,
+            );
+            initRound();
+            setGamestate(GameState.ROUND_COMPLETE);
+        }
+    }
+
+    //Client says that they have joined the new map
+    if (
+        message.type === MessageTypeClient.LOADED_NEW_MAP &&
+        gameState === GameState.ROUND_COMPLETE
+    ) {
+        /**
+         * Send to clients that they can start planning their shots
+         */
+        broadcast(
+            {
+                type: MessageTypeServer.GAME_STATE,
+                data: { state: GameState.PLANNING },
+            },
+            players,
+        );
+
+        setGamestate(GameState.PLANNING);
     }
 }

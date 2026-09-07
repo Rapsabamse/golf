@@ -10,6 +10,8 @@ export interface GeneratedMap {
         playerIndex: number,
         playerCount: number,
     ): Phaser.Math.Vector2;
+
+    destroy(): void;
 }
 
 export class MapGenerator {
@@ -19,8 +21,18 @@ export class MapGenerator {
         const width = map[0].length * this.tileSize;
         const height = map.length * this.tileSize;
 
-        this.createWorldBackground(scene, width, height);
-        this.createBackground(scene, width, height);
+        const objects: Phaser.GameObjects.GameObject[] = [];
+        const bodies: MatterJS.BodyType[] = [];
+
+        const worldBackground = this.createWorldBackground(
+            scene,
+            width,
+            height,
+        );
+
+        const background = this.createBackground(scene, width, height);
+
+        objects.push(worldBackground, background);
 
         let goalPosition: Phaser.Math.Vector2 | undefined;
 
@@ -32,9 +44,17 @@ export class MapGenerator {
                 const worldY = y * this.tileSize + this.tileSize / 2;
 
                 switch (tile) {
-                    case "x":
-                        this.createWall(scene, worldX, worldY);
+                    case "x": {
+                        const { visual, body } = this.createWall(
+                            scene,
+                            worldX,
+                            worldY,
+                        );
+
+                        objects.push(visual);
+                        bodies.push(body);
                         break;
+                    }
 
                     case "g":
                         goalPosition = new Phaser.Math.Vector2(worldX, worldY);
@@ -69,6 +89,18 @@ export class MapGenerator {
                 playerCount: number,
             ): Phaser.Math.Vector2 {
                 return spawnLine.getPosition(playerIndex, playerCount);
+            },
+
+            destroy() {
+                for (const object of objects) {
+                    object.destroy();
+                }
+
+                for (const body of bodies) {
+                    scene.matter.world.remove(body);
+                }
+
+                goal.destroy();
             },
         };
     }
@@ -110,7 +142,14 @@ export class MapGenerator {
     }
 
     private createWall(scene: Phaser.Scene, x: number, y: number) {
-        createRectangle(scene, x, y, this.tileSize, this.tileSize, 0xffffff);
+        return createRectangle(
+            scene,
+            x,
+            y,
+            this.tileSize,
+            this.tileSize,
+            0xffffff,
+        );
     }
 
     private createWorldBackground(
@@ -118,7 +157,7 @@ export class MapGenerator {
         width: number,
         height: number,
     ) {
-        scene.add.tileSprite(
+        return scene.add.tileSprite(
             width / 2,
             height / 2,
             width * 3,
@@ -132,7 +171,7 @@ export class MapGenerator {
         width: number,
         height: number,
     ) {
-        scene.add.tileSprite(
+        return scene.add.tileSprite(
             width / 2,
             height / 2,
             width,

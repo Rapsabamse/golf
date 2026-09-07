@@ -6,7 +6,7 @@ import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
 import { GeneratedMap, MapGenerator } from "../GameMaps/MapGenerator";
-import { tmpMap } from "../GameMaps/map_1";
+import { map1, map2 } from "../GameMaps/maps";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -36,7 +36,7 @@ export class Game extends Phaser.Scene {
         //Subscribe to playerListUpdates
         this.network.onPlayerList = (players) => {
             if (this.network.isLobbyWaiting()) {
-                this.ballManager.updateBalls(players);
+                this.ballManager.updateBalls(players, false);
 
                 //Kameran ska följa bollen
                 const ownBall = this.ballManager.getOwnBall();
@@ -84,11 +84,35 @@ export class Game extends Phaser.Scene {
                     );
                 }
             }
+
+            if (gamestate === GameState.ROUND_COMPLETE) {
+                const recievedData: ServerData = data;
+
+                //Vi ska visa tabell på standings
+                //Just nu så går vi bara direkt till den nya kartan
+
+                //Destroy the old map and generate a new one
+                this.currentMap.destroy();
+
+                this.currentMap = mapGenerator.generate(this, map2);
+
+                this.ballManager.setMap(this.currentMap);
+                this.ballManager.updateBalls(recievedData.playerList!, true);
+
+                //Kameran ska följa bollen
+                const ownBall = this.ballManager.getOwnBall();
+                if (ownBall) {
+                    this.camera.startFollow(ownBall.visual);
+                }
+
+                //Tell the server that we have created the new map
+                this.network.sendMapLoaded();
+            }
         };
 
         // Create map
         const mapGenerator = new MapGenerator(25);
-        this.currentMap = mapGenerator.generate(this, tmpMap);
+        this.currentMap = mapGenerator.generate(this, map1);
 
         //Create the ball manager
         this.ballManager = new BallManager(

@@ -6,6 +6,7 @@ export enum MessageTypeClient {
     SIMULATION_DONE,
     SHOT_SELECTED,
     PLAYER_GOAL,
+    LOADED_NEW_MAP,
 }
 
 export enum MessageTypeServer {
@@ -19,14 +20,15 @@ export enum GameState {
     PLANNING,
     SIMULATING,
     SIMULATING_HOST,
+    ROUND_COMPLETE,
 }
 
 export interface Player {
     id: string;
-    socket: WebSocket;
-    ready: boolean;
-    finishedSimulating: boolean;
-    state: PlayerState;
+    socket?: WebSocket;
+    ready?: boolean;
+    finishedSimulating?: boolean;
+    state?: PlayerState;
     roundState?: RoundState;
     shot?: PlayerShot;
 }

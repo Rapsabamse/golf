@@ -72,6 +72,10 @@ export class Network {
         });
     }
 
+    sendMapLoaded() {
+        this.send({ type: MessageTypeClient.LOADED_NEW_MAP });
+    }
+
     sendSimulationResult(balls: { playerId: string; x: number; y: number }[]) {
         this.send({ type: MessageTypeClient.SIMULATION_DONE, data: balls });
     }

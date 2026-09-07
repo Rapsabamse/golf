@@ -18,18 +18,18 @@ export class BallManager {
 
     constructor(
         private readonly scene: Phaser.Scene,
-        private readonly gameMap: GeneratedMap,
+        private gameMap: GeneratedMap,
         private readonly getPlayerId: () => string,
         private readonly network: Network,
         private readonly getScoringPlayers: () => string[],
     ) {}
 
-    updateBalls(players: Player[]) {
+    updateBalls(players: Player[], clear: boolean) {
         const playerIds = new Set(players.map((player) => player.id));
 
         // Remove balls for players that left
         for (const [playerId, ball] of this.balls) {
-            if (!playerIds.has(playerId)) {
+            if (!playerIds.has(playerId) || clear) {
                 ball.visual.destroy();
                 this.scene.matter.world.remove(ball.body);
                 this.balls.delete(playerId);
@@ -172,6 +172,11 @@ export class BallManager {
         }
 
         console.warn("Goal reached by unknown ball");
+    }
+
+    setMap(gameMap: GeneratedMap) {
+        this.gameMap = gameMap;
+        this.isSimulating = false;
     }
 
     private getBallPositions(): BallLocation[] {

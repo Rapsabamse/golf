@@ -57,10 +57,15 @@ export function createRectangle(
     height: number,
     color: number,
 ) {
-    scene.add.rectangle(x, y, width, height, color);
+    const visual = scene.add.rectangle(x, y, width, height, color);
 
-    scene.matter.add.rectangle(x, y, width, height, {
+    const body = scene.matter.add.rectangle(x, y, width, height, {
         isStatic: true,
         restitution: 0.8,
     });
+
+    return {
+        visual,
+        body,
+    };
 }

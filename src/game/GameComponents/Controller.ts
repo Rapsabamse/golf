@@ -22,7 +22,7 @@ export class AimController {
         private readonly getOwnBall: () => AimBall | undefined,
         private readonly network: Network,
     ) {
-        this.aimLine = scene.add.graphics();
+        this.aimLine = scene.add.graphics().setDepth(99);
 
         this.createInputs(network);
     }
