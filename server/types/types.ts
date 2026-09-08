@@ -7,6 +7,7 @@ export enum MessageTypeClient {
     SHOT_SELECTED,
     PLAYER_GOAL,
     LOADED_NEW_MAP,
+    NAME,
 }
 
 export enum MessageTypeServer {
@@ -25,6 +26,7 @@ export enum GameState {
 
 export interface Player {
     id: string;
+    name: string;
     socket?: WebSocket;
     state?: PlayerState;
     roundState?: RoundState;

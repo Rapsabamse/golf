@@ -25,8 +25,9 @@ export function sendPlayerList(players: Map<string, Player>) {
 }
 
 export function getPlayersList(players: Map<string, Player>) {
-    return Array.from(players.values()).map((player) => ({
+    return Array.from(players.values()).map((player: Player) => ({
         id: player.id,
-        ready: player.ready,
+        name: player.name,
+        state: { points: player.state ? player.state.points : [] },
     }));
 }

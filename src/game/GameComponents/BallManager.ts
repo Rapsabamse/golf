@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { BallLocation, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
-import { GeneratedMap } from "../GameMaps/MapGenerator";
+import { GeneratedMap } from "../GameMaps/Type";
 
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
@@ -48,7 +48,8 @@ export class BallManager {
             if (!ball) {
                 const visual = this.scene.add
                     .circle(position.x, position.y, BALLRADIUS, 0xffffff)
-                    .setStrokeStyle(2, 0x444444);
+                    .setStrokeStyle(2, 0x444444)
+                    .setDepth(1000);
 
                 const body = this.scene.matter.add.circle(
                     position.x,

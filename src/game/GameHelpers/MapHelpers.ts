@@ -69,3 +69,39 @@ export function createRectangle(
         body,
     };
 }
+
+export function createDiagonalWall(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    direction: "/" | "\\",
+    tileSize: number,
+) {
+    const half = tileSize / 2;
+
+    const vertices =
+        direction === "/"
+            ? [
+                  { x: -half, y: half },
+                  { x: half, y: half },
+                  { x: half, y: -half },
+              ]
+            : [
+                  { x: -half, y: -half },
+                  { x: half, y: -half },
+                  { x: -half, y: half },
+              ];
+
+    const body = scene.matter.add.fromVertices(x, y, vertices, {
+        isStatic: true,
+    });
+
+    const visual = scene.add.polygon(
+        x,
+        y,
+        vertices.flatMap((v) => [v.x, v.y]),
+        0xffffff,
+    );
+
+    return { visual, body };
+}

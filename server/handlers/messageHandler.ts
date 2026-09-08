@@ -24,6 +24,16 @@ export function handleMessages(
 ) {
     const message = JSON.parse(data.toString());
 
+    if (message.type === MessageTypeClient.NAME) {
+        const player = players.get(playerId);
+
+        console.log(playerId, " set their name to: ", message.data);
+
+        if (player) {
+            player.name = message.data;
+        }
+    }
+
     //A client tries to start the game
     if (
         message.type === MessageTypeClient.START_GAME &&

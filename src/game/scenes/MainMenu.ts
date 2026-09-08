@@ -1,14 +1,14 @@
 import { GameObjects, Scene } from "phaser";
 
 import { EventBus } from "../EventBus";
+import { getRandomName } from "../GameHelpers/MenuHelpers";
 
 export class MainMenu extends Scene {
     background: GameObjects.Image;
-    logo: GameObjects.Image;
-    title: GameObjects.Text;
+    logo: GameObjects.Text;
     joinButton: GameObjects.Text;
 
-    logoTween: Phaser.Tweens.Tween | null = null;
+    private nameInput!: HTMLInputElement;
 
     constructor() {
         super("MainMenu");
@@ -18,13 +18,47 @@ export class MainMenu extends Scene {
         this.background = this.add.image(512, 384, "background").setScale(1.3);
 
         this.logo = this.add
-            .image(640, 250, "logo")
-            .setDepth(100)
-            .setScale(0.45);
+            .text(640, 300, "GOLF - golf", {
+                fontSize: "64px",
+                fontStyle: "bold",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 6,
+                shadow: {
+                    offsetX: 4,
+                    offsetY: 4,
+                    color: "#000000",
+                    blur: 4,
+                    fill: true,
+                },
+            })
+            .setOrigin(0.5);
 
+        this.createNameInput();
         this.createJoinButton();
 
         EventBus.emit("current-scene-ready", this);
+    }
+
+    private createNameInput() {
+        this.nameInput = document.createElement("input");
+
+        this.nameInput.type = "text";
+        this.nameInput.placeholder = getRandomName();
+        this.nameInput.maxLength = 16;
+
+        Object.assign(this.nameInput.style, {
+            position: "absolute",
+            left: "50%",
+            top: "55%",
+            transform: "translate(-50%, -50%)",
+            width: "300px",
+            padding: "10px",
+            fontSize: "24px",
+            textAlign: "center",
+        });
+
+        document.body.appendChild(this.nameInput);
     }
 
     private createJoinButton() {
@@ -55,12 +89,12 @@ export class MainMenu extends Scene {
     }
 
     changeScene() {
-        if (this.logoTween) {
-            this.logoTween.stop();
-            this.logoTween = null;
-        }
+        const name = this.nameInput.value.trim() || this.nameInput.placeholder;
 
-        this.scene.start("Game");
+        this.nameInput.remove();
+
+        this.scene.start("Game", {
+            playerName: name,
+        });
     }
 }
-

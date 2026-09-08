@@ -12,10 +12,12 @@ export class Boot extends Scene {
         this.load.image("background", "assets/background.png");
         this.load.image("worldBackground", "assets/worldBackground.jpg");
         this.load.image("goal", "assets/goal.png");
+
+        this.load.image("grass", "assets/tileSet/grass.png");
+        this.load.tilemapTiledJSON("testMap", "assets/maps/testMap.json");
     }
 
     create() {
         this.scene.start("Preloader");
     }
 }
-

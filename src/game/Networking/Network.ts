@@ -15,11 +15,16 @@ export class Network {
     onPlayerList?: (players: Player[]) => void;
     onGameStateChange?: (gamestate: GameState, data?: any) => void;
 
-    connect() {
+    connect(playerName: string) {
         this.socket = new WebSocket("ws://localhost:8090");
 
         this.socket.onopen = () => {
             console.log("Connected to server");
+
+            this.send({
+                type: MessageTypeClient.NAME,
+                data: playerName,
+            });
         };
 
         this.socket.onmessage = (event) => {

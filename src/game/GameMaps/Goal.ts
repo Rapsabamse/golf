@@ -1,5 +1,8 @@
 import * as Phaser from "phaser";
 
+const GOAL_BRAKE_FACTOR = 0.2;
+const GOAL_SPEED_THRESHOLD = 3;
+
 export class Goal {
     private readonly body: MatterJS.BodyType;
     private readonly visual: Phaser.GameObjects.Arc;
@@ -40,7 +43,21 @@ export class Goal {
                 ballBody = pair.bodyA;
             }
 
-            if (ballBody) {
+            if (!ballBody) {
+                continue;
+            }
+
+            //Slow down the ball when it collides with the goal
+            const velocity = {
+                x: ballBody.velocity.x * GOAL_BRAKE_FACTOR,
+                y: ballBody.velocity.y * GOAL_BRAKE_FACTOR,
+            };
+
+            this.scene.matter.body.setVelocity(ballBody, velocity);
+
+            //Check if the ball is under the threshold for a collision to count as a goal
+            const speed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
+            if (speed <= GOAL_SPEED_THRESHOLD) {
                 this.onBallEntered?.(ballBody);
             }
         }
