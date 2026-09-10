@@ -27,7 +27,7 @@
         "dev-nolog": "vite --config vite/config.dev.mjs",
         "build-nolog": "vite build --config vite/config.prod.mjs",
         "start": "tsx server/server.ts",
-        "start:client": "vite preview --host 0.0.0.0"
+        "start:client": "vite preview --config vite/config.prod.mjs --host 0.0.0.0"
     },
     "dependencies": {
         "phaser": "4.0.0",
