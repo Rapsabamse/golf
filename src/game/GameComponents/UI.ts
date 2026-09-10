@@ -124,6 +124,12 @@ export class GameUI {
         }
     }
 
+    setReady() {
+        this.gameStateTextTitle.setText("Shot set");
+        this.gameStateTextSubtitle.setText("Waiting for\nother players");
+        this.gameStateButton.visible = false;
+    }
+
     private resizeGameStateBackground() {
         const padding = 10;
 

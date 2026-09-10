@@ -11,6 +11,12 @@ export function broadcast(
     }
 }
 
+export function broadcastSingle(message: ServerMessageData, player: Player) {
+    const data = JSON.stringify(message);
+
+    player.socket?.send(data);
+}
+
 export function sendPlayerList(players: Map<string, Player>) {
     const playerList = getPlayersList(players);
 

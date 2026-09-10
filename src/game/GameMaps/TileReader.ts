@@ -9,6 +9,13 @@ export class TiledMapLoader {
     load(scene: Phaser.Scene, key: string): GeneratedMap {
         const map = scene.make.tilemap({ key });
 
+        //Add the background
+        scene.add
+            .tileSprite(-5000, -5000, 10000, 10000, "space")
+            .setOrigin(0, 0)
+            .setScrollFactor(0)
+            .setDepth(-100);
+
         const grassTileset = map.addTilesetImage("Grass", "grass");
 
         if (!grassTileset) {

@@ -29,7 +29,10 @@ export class AimController {
 
     private createInputs(network: Network) {
         this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-            if (pointer.event.target !== this.scene.game.canvas) {
+            if (
+                pointer.event.target !== this.scene.game.canvas ||
+                !this.canInteract
+            ) {
                 return;
             }
 
@@ -40,6 +43,7 @@ export class AimController {
             }
 
             this.isDragging = true;
+            this.updateAimline(pointer, ball);
         });
 
         this.scene.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
@@ -53,21 +57,7 @@ export class AimController {
                 return;
             }
 
-            const { direction, force } = this.calculateLaunch(pointer);
-
-            this.aimLine.clear();
-            this.aimLine.lineStyle(3, 0xffffff);
-
-            const endX =
-                ball.visual.x + direction.x * force * this.aimLineMultiplier;
-
-            const endY =
-                ball.visual.y + direction.y * force * this.aimLineMultiplier;
-
-            this.aimLine.beginPath();
-            this.aimLine.moveTo(ball.visual.x, ball.visual.y);
-            this.aimLine.lineTo(endX, endY);
-            this.aimLine.strokePath();
+            this.updateAimline(pointer, ball);
         });
 
         this.scene.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
@@ -89,6 +79,24 @@ export class AimController {
 
             network.sendShot(velocity);
         });
+    }
+
+    private updateAimline(pointer: Phaser.Input.Pointer, ball: AimBall) {
+        const { direction, force } = this.calculateLaunch(pointer);
+
+        this.aimLine.clear();
+        this.aimLine.lineStyle(3, 0xffffff);
+
+        const endX =
+            ball.visual.x + direction.x * force * this.aimLineMultiplier;
+
+        const endY =
+            ball.visual.y + direction.y * force * this.aimLineMultiplier;
+
+        this.aimLine.beginPath();
+        this.aimLine.moveTo(ball.visual.x, ball.visual.y);
+        this.aimLine.lineTo(endX, endY);
+        this.aimLine.strokePath();
     }
 
     private calculateLaunch(pointer: Phaser.Input.Pointer) {

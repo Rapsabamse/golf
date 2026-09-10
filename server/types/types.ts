@@ -14,6 +14,7 @@ export enum MessageTypeServer {
     PLAYER_LIST,
     CONNECTED,
     GAME_STATE,
+    SHOT_SELECTION_CONFIRMATION,
 }
 
 export enum GameState {

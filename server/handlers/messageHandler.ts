@@ -6,7 +6,7 @@ import {
     Player,
     ServerData,
 } from "../types/types";
-import { broadcast, getPlayersList } from "../serverHelpers";
+import { broadcast, broadcastSingle, getPlayersList } from "../serverHelpers";
 import { WebSocket } from "ws";
 import Phaser from "phaser";
 
@@ -88,6 +88,17 @@ export function handleMessages(
         gameState === GameState.PLANNING
     ) {
         playersReady.add(playerId);
+
+        //Tell player that server set them as ready
+        const player = players.get(playerId);
+        if (player) {
+            broadcastSingle(
+                {
+                    type: MessageTypeServer.SHOT_SELECTION_CONFIRMATION,
+                },
+                player,
+            );
+        }
 
         const allPlayersReady = Array.from(players.values())
             .filter(

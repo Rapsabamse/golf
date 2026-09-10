@@ -49,6 +49,11 @@ export class Game extends Phaser.Scene {
             }
         };
 
+        //Handle when we get ready confirmation form server
+        this.network.onReadyConfirmed = () => {
+            this.ui.setReady();
+        };
+
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
             if (gamestate === GameState.PLANNING) {
