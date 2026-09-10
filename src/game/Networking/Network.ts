@@ -6,6 +6,8 @@ import {
     ServerMessageData,
 } from "../../../server/types/types";
 
+const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8090";
+
 export class Network {
     private socket!: WebSocket;
     private playerId!: string;
@@ -16,7 +18,7 @@ export class Network {
     onGameStateChange?: (gamestate: GameState, data?: any) => void;
 
     connect(playerName: string) {
-        this.socket = new WebSocket("ws://localhost:8090");
+        this.socket = new WebSocket(WS_URL);
 
         this.socket.onopen = () => {
             console.log("Connected to server");

@@ -5,7 +5,7 @@ import { handleMessages } from "./handlers/messageHandler";
 import { handleConnection } from "./handlers/connectionHandler";
 import { handleClose } from "./handlers/closeHandler";
 
-const PORT = 8090;
+const PORT = Number(process.env.PORT) || 8090;
 
 const wss = new WebSocketServer({
     port: PORT,
