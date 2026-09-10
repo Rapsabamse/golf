@@ -8,6 +8,7 @@ import { GameUI } from "../GameComponents/UI";
 import { GeneratedMap } from "../GameMaps/Type";
 import { Scoreboard } from "../GameComponents/Scoreboard";
 import { TiledMapLoader } from "../GameMaps/TileReader";
+import { getNextMap } from "../GameMaps/maps";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -100,7 +101,7 @@ export class Game extends Phaser.Scene {
 
                     this.currentMap = new TiledMapLoader().load(
                         this,
-                        "testMap",
+                        getNextMap(),
                     );
 
                     this.ballManager.setMap(this.currentMap);
@@ -129,7 +130,7 @@ export class Game extends Phaser.Scene {
 
         // Create map
         const mapLoader = new TiledMapLoader();
-        this.currentMap = mapLoader.load(this, "testMap");
+        this.currentMap = mapLoader.load(this, getNextMap());
 
         //Create the ball manager
         this.ballManager = new BallManager(

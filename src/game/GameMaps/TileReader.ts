@@ -21,7 +21,7 @@ export class TiledMapLoader {
             throw new Error("Failed to create Ground layer");
         }
 
-        //Create objects
+        // Create objects
 
         const objectsLayer = map.getObjectLayer("Objects");
 
@@ -82,12 +82,66 @@ export class TiledMapLoader {
         object: Phaser.Types.Tilemaps.TiledObject,
         bodies: MatterJS.BodyType[],
     ) {
-        if (!object.polygon || object.polygon.length < 3) {
-            console.warn(`Wall "${object.name}" has an invalid polygon`);
+        // Polygon wall
+        if (object.polygon && object.polygon.length >= 3) {
+            this.createPolygonWall(scene, object, bodies);
             return;
         }
 
-        const points = object.polygon.map((point) => ({
+        // Rectangle wall
+        if (object.width !== undefined && object.height !== undefined) {
+            this.createRectangleWall(scene, object, bodies);
+            return;
+        }
+
+        console.warn(`Wall "${object.name}" has invalid geometry`);
+    }
+
+    private createRectangleWall(
+        scene: Phaser.Scene,
+        object: Phaser.Types.Tilemaps.TiledObject,
+        bodies: MatterJS.BodyType[],
+    ) {
+        const x = object.x + object.width! / 2;
+        const y = object.y + object.height! / 2;
+
+        // Get color from Tiled
+        const colorProperty = object.properties?.find(
+            (property) => property.name === "color",
+        );
+
+        const color = colorProperty?.value ?? "#555555";
+
+        // Visual
+        const graphics = scene.add.graphics();
+
+        graphics.fillStyle(
+            Phaser.Display.Color.HexStringToColor(color).color,
+            1,
+        );
+
+        graphics.fillRect(object.x, object.y, object.width!, object.height!);
+
+        // Collision
+        const body = scene.matter.add.rectangle(
+            x,
+            y,
+            object.width!,
+            object.height!,
+            {
+                isStatic: true,
+            },
+        );
+
+        bodies.push(body);
+    }
+
+    private createPolygonWall(
+        scene: Phaser.Scene,
+        object: Phaser.Types.Tilemaps.TiledObject,
+        bodies: MatterJS.BodyType[],
+    ) {
+        const points = object.polygon!.map((point) => ({
             x: point.x,
             y: point.y,
         }));
@@ -117,8 +171,7 @@ export class TiledMapLoader {
         graphics.closePath();
         graphics.fillPath();
 
-        //Collision
-
+        // Collision
         const centroid = this.getPolygonCentroid(points);
 
         const localPoints = points.map((point) => ({
