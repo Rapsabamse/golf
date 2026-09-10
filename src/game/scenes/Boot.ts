@@ -16,6 +16,7 @@ export class Boot extends Scene {
         this.load.image("grass", "assets/tileSet/grass.png");
         this.load.tilemapTiledJSON("map1", "assets/maps/map1.json");
         this.load.tilemapTiledJSON("map2", "assets/maps/map2.json");
+        this.load.tilemapTiledJSON("map3", "assets/maps/map3.json");
     }
 
     create() {

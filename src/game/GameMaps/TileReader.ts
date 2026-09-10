@@ -88,6 +88,12 @@ export class TiledMapLoader {
             return;
         }
 
+        // Ellipse wall
+        if (object.ellipse) {
+            this.createEllipseWall(scene, object, bodies);
+            return;
+        }
+
         // Rectangle wall
         if (object.width !== undefined && object.height !== undefined) {
             this.createRectangleWall(scene, object, bodies);
@@ -95,6 +101,44 @@ export class TiledMapLoader {
         }
 
         console.warn(`Wall "${object.name}" has invalid geometry`);
+    }
+
+    private createEllipseWall(
+        scene: Phaser.Scene,
+        object: Phaser.Types.Tilemaps.TiledObject,
+        bodies: MatterJS.BodyType[],
+    ) {
+        const x = object.x + object.width! / 2;
+        const y = object.y + object.height! / 2;
+
+        // Get color from Tiled
+        const colorProperty = object.properties?.find(
+            (property) => property.name === "color",
+        );
+
+        const color = colorProperty?.value ?? "#555555";
+
+        // Visual
+        const graphics = scene.add.graphics();
+
+        graphics.fillStyle(
+            Phaser.Display.Color.HexStringToColor(color).color,
+            1,
+        );
+
+        graphics.fillEllipse(x, y, object.width!, object.height!);
+
+        // Collision
+        const body = scene.matter.add.circle(
+            x,
+            y,
+            Math.max(object.width!, object.height!) / 2,
+            {
+                isStatic: true,
+            },
+        );
+
+        bodies.push(body);
     }
 
     private createRectangleWall(

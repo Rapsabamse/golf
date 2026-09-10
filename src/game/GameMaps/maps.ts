@@ -1,6 +1,6 @@
 let currentMap = -1;
 
-const maps = ["map1", "map2"];
+const maps = ["map1", "map2", "map3"];
 
 export function getNextMap() {
     currentMap = (currentMap + 1) % maps.length;
