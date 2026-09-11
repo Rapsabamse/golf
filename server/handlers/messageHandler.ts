@@ -160,17 +160,20 @@ export function handleMessages(
 
             console.log("broadcasting ball-locations");
 
-            broadcast(
-                {
-                    type: MessageTypeServer.GAME_STATE,
-                    data: {
-                        state: GameState.PLANNING,
-                        ballLocations: getBallLocations(),
-                        scoringPlayers: getScoringPlayers(),
+            for (const player of players.values()) {
+                broadcastSingle(
+                    {
+                        type: MessageTypeServer.GAME_STATE,
+                        data: {
+                            state: GameState.PLANNING,
+                            ballLocations: getBallLocations(),
+                            scoringPlayers: getScoringPlayers(),
+                            shouldWait: player.waitingForNextRound,
+                        },
                     },
-                },
-                players,
-            );
+                    player,
+                );
+            }
         }
     }
 

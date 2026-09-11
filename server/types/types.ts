@@ -63,6 +63,7 @@ export interface ServerData {
     scoringPlayers?: string[];
     isHost?: boolean;
     shouldWait?: boolean;
+    hostId?: string | undefined;
 }
 
 export interface BallLocation {

@@ -1,5 +1,5 @@
-import { sendPlayerList } from "../serverHelpers";
-import { GameState, Player } from "../types/types";
+import { broadcast, broadcastSingle, sendPlayerList } from "../serverHelpers";
+import { GameState, MessageTypeServer, Player } from "../types/types";
 
 export function handleClose(
     playerId: string,
@@ -14,9 +14,6 @@ export function handleClose(
     console.log(`Player disconnected: ${playerId}`);
     console.log(`Players: ${players.size}`);
 
-    // Tell remaining clients about the updated list
-    sendPlayerList(players);
-
     if (playerId === getHostId()) {
         const newId = players.keys().next().value;
         if (newId) {
@@ -24,9 +21,33 @@ export function handleClose(
         }
     }
 
+    // Tell remaining clients about the updated list
+    sendPlayerList(players, getHostId());
+
     if (players.size < 1) {
         console.log("All players have left. Going back to waiting state");
         setGamestate(GameState.WAITING);
         setHostId(undefined);
+    }
+
+    let hostId = getHostId();
+    if (hostId && players.get(hostId)?.waitingForNextRound) {
+        console.log("Host is waiting for next round, resetting game");
+        setGamestate(GameState.WAITING);
+
+        for (const player of players.values()) {
+            player.waitingForNextRound = false;
+
+            broadcastSingle(
+                {
+                    type: MessageTypeServer.GAME_STATE,
+                    data: {
+                        state: GameState.WAITING,
+                        isHost: getHostId() === player.id,
+                    },
+                },
+                player,
+            );
+        }
     }
 }

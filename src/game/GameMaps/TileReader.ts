@@ -9,10 +9,18 @@ export class TiledMapLoader {
     load(scene: Phaser.Scene, key: string): GeneratedMap {
         const map = scene.make.tilemap({ key });
 
-        //Add the background
-        scene.add
-            .tileSprite(-5000, -5000, 10000, 10000, "space")
-            .setOrigin(0, 0)
+        const bodies: MatterJS.BodyType[] = [];
+        const wallGraphics: Phaser.GameObjects.Graphics[] = [];
+
+        // Add the background
+        const background = scene.add
+            .tileSprite(
+                scene.scale.width / 2,
+                scene.scale.height / 2,
+                scene.scale.width * 3,
+                scene.scale.height * 3,
+                "space",
+            )
             .setScrollFactor(0)
             .setDepth(-100);
 
@@ -29,14 +37,11 @@ export class TiledMapLoader {
         }
 
         // Create objects
-
         const objectsLayer = map.getObjectLayer("Objects");
 
         if (!objectsLayer) {
             throw new Error("Map does not contain an Objects layer");
         }
-
-        const bodies: MatterJS.BodyType[] = [];
 
         let goalPosition: Phaser.Math.Vector2 | undefined;
         let spawnLine: SpawnLine | undefined;
@@ -44,7 +49,7 @@ export class TiledMapLoader {
         for (const object of objectsLayer.objects) {
             switch (object.name) {
                 case "Wall":
-                    this.createWall(scene, object, bodies);
+                    this.createWall(scene, object, bodies, wallGraphics);
                     break;
 
                 case "Goal":
@@ -79,6 +84,12 @@ export class TiledMapLoader {
                     scene.matter.world.remove(body);
                 }
 
+                for (const graphics of wallGraphics) {
+                    graphics.destroy();
+                }
+
+                groundLayer.destroy();
+                background.destroy();
                 goal.destroy();
             },
         };
@@ -88,22 +99,23 @@ export class TiledMapLoader {
         scene: Phaser.Scene,
         object: Phaser.Types.Tilemaps.TiledObject,
         bodies: MatterJS.BodyType[],
+        wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
         // Polygon wall
         if (object.polygon && object.polygon.length >= 3) {
-            this.createPolygonWall(scene, object, bodies);
+            this.createPolygonWall(scene, object, bodies, wallGraphics);
             return;
         }
 
         // Ellipse wall
         if (object.ellipse) {
-            this.createEllipseWall(scene, object, bodies);
+            this.createEllipseWall(scene, object, bodies, wallGraphics);
             return;
         }
 
         // Rectangle wall
         if (object.width !== undefined && object.height !== undefined) {
-            this.createRectangleWall(scene, object, bodies);
+            this.createRectangleWall(scene, object, bodies, wallGraphics);
             return;
         }
 
@@ -114,6 +126,7 @@ export class TiledMapLoader {
         scene: Phaser.Scene,
         object: Phaser.Types.Tilemaps.TiledObject,
         bodies: MatterJS.BodyType[],
+        wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
         const x = object.x + object.width! / 2;
         const y = object.y + object.height! / 2;
@@ -135,6 +148,8 @@ export class TiledMapLoader {
 
         graphics.fillEllipse(x, y, object.width!, object.height!);
 
+        wallGraphics.push(graphics);
+
         // Collision
         const body = scene.matter.add.circle(
             x,
@@ -152,6 +167,7 @@ export class TiledMapLoader {
         scene: Phaser.Scene,
         object: Phaser.Types.Tilemaps.TiledObject,
         bodies: MatterJS.BodyType[],
+        wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
         const x = object.x + object.width! / 2;
         const y = object.y + object.height! / 2;
@@ -173,6 +189,8 @@ export class TiledMapLoader {
 
         graphics.fillRect(object.x, object.y, object.width!, object.height!);
 
+        wallGraphics.push(graphics);
+
         // Collision
         const body = scene.matter.add.rectangle(
             x,
@@ -191,6 +209,7 @@ export class TiledMapLoader {
         scene: Phaser.Scene,
         object: Phaser.Types.Tilemaps.TiledObject,
         bodies: MatterJS.BodyType[],
+        wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
         const points = object.polygon!.map((point) => ({
             x: point.x,
@@ -221,6 +240,8 @@ export class TiledMapLoader {
 
         graphics.closePath();
         graphics.fillPath();
+
+        wallGraphics.push(graphics);
 
         // Collision
         const centroid = this.getPolygonCentroid(points);

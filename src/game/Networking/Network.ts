@@ -13,8 +13,9 @@ export class Network {
     private playerId!: string;
     private players: Player[] = [];
     private gameState: GameState;
+    private isHost: boolean;
 
-    onPlayerList?: (players: Player[]) => void;
+    onPlayerList?: (players: Player[], self: Player | undefined) => void;
     onGameStateChange?: (gamestate: GameState, data?: any) => void;
     onReadyConfirmed?: () => void;
     onConnection?: (gamestate: GameState, isHost: boolean) => void;
@@ -33,6 +34,14 @@ export class Network {
 
         this.socket.onmessage = (event) => {
             const message: ServerMessageData = JSON.parse(event.data);
+
+            if (
+                (message.data?.hostId &&
+                    message.data.hostId === this.playerId) ||
+                message.data?.isHost
+            ) {
+                this.isHost = true;
+            }
 
             if (
                 message.type === MessageTypeServer.SHOT_SELECTION_CONFIRMATION
@@ -64,7 +73,15 @@ export class Network {
             if (message.type === MessageTypeServer.PLAYER_LIST) {
                 if (message.data.playerList) {
                     this.players = message.data.playerList;
-                    this.onPlayerList?.(this.players);
+
+                    let self = undefined;
+                    this.players.forEach((player) => {
+                        if (player.id === this.playerId) {
+                            self = player;
+                        }
+                    });
+
+                    this.onPlayerList?.(this.players, self);
                 }
             }
 
@@ -132,6 +149,14 @@ export class Network {
 
     isLobbySimulating(): Boolean {
         return this.gameState === GameState.SIMULATING;
+    }
+
+    getGameState(): GameState {
+        return this.gameState;
+    }
+
+    getIsHost(): boolean {
+        return this.isHost;
     }
 
     startGame() {

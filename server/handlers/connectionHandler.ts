@@ -48,5 +48,5 @@ export function handleConnection(
     );
 
     // Send the updated player list to everyone
-    sendPlayerList(players);
+    sendPlayerList(players, getHostId());
 }

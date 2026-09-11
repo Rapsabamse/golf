@@ -17,12 +17,15 @@ export function broadcastSingle(message: ServerMessageData, player: Player) {
     player.socket?.send(data);
 }
 
-export function sendPlayerList(players: Map<string, Player>) {
+export function sendPlayerList(
+    players: Map<string, Player>,
+    hostId: string | undefined,
+) {
     const playerList = getPlayersList(players);
 
     const message = JSON.stringify({
         type: MessageTypeServer.PLAYER_LIST,
-        data: { playerList: playerList },
+        data: { playerList: playerList, hostId: hostId },
     });
 
     for (const player of players.values()) {
@@ -35,5 +38,6 @@ export function getPlayersList(players: Map<string, Player>) {
         id: player.id,
         name: player.name,
         state: { points: player.state ? player.state.points : [] },
+        waitingForNextRound: player.waitingForNextRound,
     }));
 }

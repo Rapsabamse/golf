@@ -1,14 +1,14 @@
 import * as Phaser from "phaser";
 import { EventBus } from "../EventBus";
 import { Network } from "../Networking/Network";
-import { GameState, ServerData } from "../../../server/types/types";
+import { GameState, Player, ServerData } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
 import { GeneratedMap } from "../GameMaps/Type";
 import { Scoreboard } from "../GameComponents/Scoreboard";
 import { TiledMapLoader } from "../GameMaps/TileReader";
-import { getNextMap } from "../GameMaps/maps";
+import { getBaseMap, getNextMap } from "../GameMaps/maps";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -37,7 +37,10 @@ export class Game extends Phaser.Scene {
         this.network.connect(data.playerName);
 
         //Subscribe to playerListUpdates
-        this.network.onPlayerList = (players) => {
+        this.network.onPlayerList = (
+            players: Player[],
+            self: Player | undefined,
+        ) => {
             if (this.network.isLobbyWaiting()) {
                 this.ballManager.updateBalls(players, false);
 
@@ -47,6 +50,12 @@ export class Game extends Phaser.Scene {
                     this.camera.startFollow(ownBall.visual);
                 }
             }
+
+            this.ui.updateUI(
+                this.network.getGameState(),
+                this.network.getIsHost(),
+                self?.waitingForNextRound,
+            );
         };
 
         //Handle when we get ready confirmation form server
@@ -56,6 +65,10 @@ export class Game extends Phaser.Scene {
 
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
+            if (gamestate === GameState.WAITING) {
+                this.resetGame();
+            }
+
             if (gamestate === GameState.PLANNING) {
                 const recievedData: ServerData = data;
                 if (recievedData.ballLocations) {
@@ -130,12 +143,16 @@ export class Game extends Phaser.Scene {
                 });
             }
 
-            this.ui.updateUI(gamestate, data.isHost, data.shouldWait);
+            this.ui.updateUI(
+                gamestate,
+                this.network.getIsHost(),
+                data.shouldWait,
+            );
         };
 
         // Create map
         const mapLoader = new TiledMapLoader();
-        this.currentMap = mapLoader.load(this, getNextMap());
+        this.currentMap = mapLoader.load(this, getBaseMap());
 
         //Create the ball manager
         this.ballManager = new BallManager(
@@ -191,5 +208,32 @@ export class Game extends Phaser.Scene {
 
     private getScoringPlayers() {
         return this.scoredPlayers;
+    }
+
+    private resetGame() {
+        this.scoredPlayers = [];
+
+        this.aimController.updateCanInteract(false);
+        this.aimController.clearAimline();
+
+        this.currentMap.destroy();
+
+        this.currentMap = new TiledMapLoader().load(this, getBaseMap());
+
+        this.ballManager.setMap(this.currentMap);
+
+        this.currentMap.goal.setOnBallEntered((ballBody) => {
+            this.ballManager.handleGoalReached(ballBody);
+        });
+
+        this.ballManager.updateBalls(this.network.getPlayers(), false);
+
+        const ownBall = this.ballManager.getOwnBall();
+
+        if (ownBall) {
+            this.camera.startFollow(ownBall.visual);
+        }
+
+        this.ui.updateUI(GameState.WAITING, this.network.getIsHost(), false);
     }
 }

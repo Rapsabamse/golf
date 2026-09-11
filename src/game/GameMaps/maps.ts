@@ -7,3 +7,9 @@ export function getNextMap() {
 
     return maps[currentMap];
 }
+
+export function getBaseMap() {
+    currentMap = 0;
+
+    return maps[currentMap];
+}
