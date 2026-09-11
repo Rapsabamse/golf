@@ -9,6 +9,7 @@ import { GeneratedMap } from "../GameMaps/Type";
 import { Scoreboard } from "../GameComponents/Scoreboard";
 import { TiledMapLoader } from "../GameMaps/TileReader";
 import { getBaseMap, getNextMap } from "../GameMaps/maps";
+import { GameStateHandler } from "../handlers/GameStateHandler";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -21,6 +22,7 @@ export class Game extends Phaser.Scene {
     private ballManager!: BallManager;
     private ui!: GameUI;
     private scoreboard!: Scoreboard;
+    private gameStateHandler!: GameStateHandler;
 
     private scoredPlayers: string[] = [];
 
@@ -65,89 +67,7 @@ export class Game extends Phaser.Scene {
 
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
-            if (gamestate === GameState.WAITING) {
-                this.resetGame();
-            }
-
-            if (gamestate === GameState.PLANNING) {
-                const recievedData: ServerData = data;
-                if (recievedData.ballLocations) {
-                    this.ballManager.updateBallLocations(
-                        recievedData.ballLocations,
-                    );
-                }
-
-                if (recievedData.scoringPlayers) {
-                    this.scoredPlayers = recievedData.scoringPlayers;
-                    this.ballManager.updateScoringPlayers();
-                }
-
-                this.aimController.updateCanInteract(!this.haveIScored());
-            } else {
-                this.aimController.updateCanInteract(false);
-            }
-
-            if (
-                gamestate === GameState.SIMULATING ||
-                gamestate === GameState.SIMULATING_HOST
-            ) {
-                const recievedData: ServerData = data;
-
-                if (recievedData.playerList) {
-                    this.aimController.clearAimline();
-
-                    this.ballManager.simulateRound(
-                        recievedData.playerList,
-                        gamestate === GameState.SIMULATING_HOST,
-                    );
-                }
-            }
-
-            if (gamestate === GameState.ROUND_COMPLETE) {
-                const recievedData: ServerData = data;
-
-                //Resetta vilka som har gjort mål
-                this.scoredPlayers = [];
-
-                this.scoreboard.show(recievedData.playerList!);
-
-                this.time.delayedCall(5000, () => {
-                    this.scoreboard.hide();
-
-                    //Destroy the old map and generate a new one
-                    this.currentMap.destroy();
-
-                    this.currentMap = new TiledMapLoader().load(
-                        this,
-                        getNextMap(),
-                    );
-
-                    this.ballManager.setMap(this.currentMap);
-                    this.ballManager.updateBalls(
-                        recievedData.playerList!,
-                        true,
-                    );
-
-                    this.currentMap.goal.setOnBallEntered((ballBody) => {
-                        this.ballManager.handleGoalReached(ballBody);
-                    });
-
-                    //Kameran ska följa bollen
-                    const ownBall = this.ballManager.getOwnBall();
-                    if (ownBall) {
-                        this.camera.startFollow(ownBall.visual);
-                    }
-
-                    //Tell the server that we have created the new map
-                    this.network.sendMapLoaded();
-                });
-            }
-
-            this.ui.updateUI(
-                gamestate,
-                this.network.getIsHost(),
-                data.shouldWait,
-            );
+            this.gameStateHandler.handle(gamestate, data);
         };
 
         // Create map
@@ -186,6 +106,51 @@ export class Game extends Phaser.Scene {
         //Create the scoreboard
         this.scoreboard = new Scoreboard(this);
 
+        //Create the gamestateHandler
+        this.gameStateHandler = new GameStateHandler(
+            this,
+            this.network,
+            this.aimController,
+            this.ballManager,
+            this.ui,
+            this.scoreboard,
+            this.currentMap,
+            () => this.haveIScored(),
+            (players) => {
+                this.scoredPlayers = players;
+            },
+            () => this.scoredPlayers,
+            (map) => {
+                this.currentMap = map;
+            },
+        );
+
+        this.input //Add zoom feature
+            .on(
+                "wheel",
+                (
+                    _pointer: Phaser.Input.Pointer,
+                    _gameObjects: Phaser.GameObjects.GameObject[],
+                    _deltaX: number,
+                    deltaY: number,
+                ) => {
+                    const zoomAmount = 0.1;
+
+                    const targetZoom = Phaser.Math.Clamp(
+                        this.camera.zoom - Math.sign(deltaY) * zoomAmount,
+                        0.3,
+                        1.0,
+                    );
+
+                    this.tweens.add({
+                        targets: this.camera,
+                        zoom: targetZoom,
+                        duration: 150,
+                        ease: "Sine.easeOut",
+                    });
+                },
+            );
+
         EventBus.emit("current-scene-ready", this);
     }
 
@@ -208,32 +173,5 @@ export class Game extends Phaser.Scene {
 
     private getScoringPlayers() {
         return this.scoredPlayers;
-    }
-
-    private resetGame() {
-        this.scoredPlayers = [];
-
-        this.aimController.updateCanInteract(false);
-        this.aimController.clearAimline();
-
-        this.currentMap.destroy();
-
-        this.currentMap = new TiledMapLoader().load(this, getBaseMap());
-
-        this.ballManager.setMap(this.currentMap);
-
-        this.currentMap.goal.setOnBallEntered((ballBody) => {
-            this.ballManager.handleGoalReached(ballBody);
-        });
-
-        this.ballManager.updateBalls(this.network.getPlayers(), false);
-
-        const ownBall = this.ballManager.getOwnBall();
-
-        if (ownBall) {
-            this.camera.startFollow(ownBall.visual);
-        }
-
-        this.ui.updateUI(GameState.WAITING, this.network.getIsHost(), false);
     }
 }
