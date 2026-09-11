@@ -69,7 +69,21 @@ export class GameUI {
         this.gameStateBackground.visible = false;
     }
 
-    updateUI(gameState: GameState) {
+    updateUI(gameState: GameState, isHost?: boolean, shouldWait?: boolean) {
+        if (shouldWait) {
+            this.gameStateTextTitle.setText("Waiting");
+            this.gameStateTextSubtitle.setText(
+                "A round is already playing.\nWait for the next round to start",
+            );
+
+            this.gameStateBackground.visible = true;
+            this.gameStateButton.visible = false;
+
+            this.resizeGameStateBackground();
+
+            return;
+        }
+
         switch (gameState) {
             case GameState.PLANNING:
                 if (this.haveIScored()) {
@@ -108,7 +122,9 @@ export class GameUI {
             case GameState.WAITING:
                 this.gameStateTextTitle.setText("Waiting");
                 this.gameStateTextSubtitle.setText(
-                    "Waiting for players to join.\nPress start to start the game",
+                    isHost
+                        ? "Waiting for players to join.\nPress start to start the game"
+                        : "Waiting for the host to start the game",
                 );
 
                 this.gameStateButton
@@ -116,7 +132,7 @@ export class GameUI {
                     .removeAllListeners("pointerdown")
                     .on("pointerdown", () => this.startGame());
 
-                this.gameStateButton.visible = true;
+                this.gameStateButton.visible = isHost ? true : false;
                 this.gameStateBackground.visible = true;
 
                 this.resizeGameStateBackground();
@@ -135,27 +151,21 @@ export class GameUI {
 
         const titleBounds = this.gameStateTextTitle.getBounds();
         const subtitleBounds = this.gameStateTextSubtitle.getBounds();
-        const buttonBounds = this.gameStateButton.getBounds();
 
-        const left =
-            Math.min(titleBounds.x, subtitleBounds.x, buttonBounds.x) - padding;
+        const bounds = [titleBounds, subtitleBounds];
 
-        const top =
-            Math.min(titleBounds.y, subtitleBounds.y, buttonBounds.y) - padding;
+        if (this.gameStateButton.visible) {
+            bounds.push(this.gameStateButton.getBounds());
+        }
+
+        const left = Math.min(...bounds.map((bounds) => bounds.x)) - padding;
+        const top = Math.min(...bounds.map((bounds) => bounds.y)) - padding;
 
         const right =
-            Math.max(
-                titleBounds.right,
-                subtitleBounds.right,
-                buttonBounds.right,
-            ) + padding;
+            Math.max(...bounds.map((bounds) => bounds.right)) + padding;
 
         const bottom =
-            Math.max(
-                titleBounds.bottom,
-                subtitleBounds.bottom,
-                buttonBounds.bottom,
-            ) + padding;
+            Math.max(...bounds.map((bounds) => bounds.bottom)) + padding;
 
         this.gameStateBackground.clear();
         this.gameStateBackground.fillStyle(0x000000, 0.5);

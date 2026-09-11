@@ -130,7 +130,7 @@ export class Game extends Phaser.Scene {
                 });
             }
 
-            this.ui.updateUI(gamestate);
+            this.ui.updateUI(gamestate, data.isHost, data.shouldWait);
         };
 
         // Create map

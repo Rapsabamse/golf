@@ -15,6 +15,7 @@ export function handleConnection(
         socket,
         state: { points: [] },
         waitingForNextRound: gameState != GameState.WAITING,
+        name: "",
     };
 
     players.set(playerId, player);
@@ -38,7 +39,11 @@ export function handleConnection(
     socket.send(
         JSON.stringify({
             type: MessageTypeServer.GAME_STATE,
-            data: { state: gameState },
+            data: {
+                state: gameState,
+                isHost: getHostId() === playerId,
+                shouldWait: gameState != GameState.WAITING,
+            },
         }),
     );
 

@@ -87,7 +87,5 @@ function getScoringPlayers() {
         }
     });
 
-    console.log(scoredPlayersList);
-
     return scoredPlayersList;
 }

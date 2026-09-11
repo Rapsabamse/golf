@@ -17,6 +17,7 @@ export class Network {
     onPlayerList?: (players: Player[]) => void;
     onGameStateChange?: (gamestate: GameState, data?: any) => void;
     onReadyConfirmed?: () => void;
+    onConnection?: (gamestate: GameState, isHost: boolean) => void;
 
     connect(playerName: string) {
         this.socket = new WebSocket(WS_URL);
@@ -33,10 +34,6 @@ export class Network {
         this.socket.onmessage = (event) => {
             const message: ServerMessageData = JSON.parse(event.data);
 
-            console.log("Recieved message: ", JSON.parse(event.data));
-
-            console.log(MessageTypeServer[message.type]);
-
             if (
                 message.type === MessageTypeServer.SHOT_SELECTION_CONFIRMATION
             ) {
@@ -50,6 +47,17 @@ export class Network {
             if (message.type === MessageTypeServer.CONNECTED) {
                 if (message.data.playerId) {
                     this.playerId = message.data.playerId;
+
+                    if (message.data.state && message.data.isHost) {
+                        this.onConnection?.(
+                            message.data.state,
+                            message.data.isHost,
+                        );
+                    } else {
+                        console.error(
+                            "Recieved insufficient connection data from server",
+                        );
+                    }
                 }
             }
 
