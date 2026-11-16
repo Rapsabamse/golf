@@ -13,12 +13,13 @@ import { Scoreboard } from "../GameComponents/Scoreboard";
 import { GeneratedMap } from "../GameMaps/Type";
 import { TiledMapLoader } from "../GameMaps/TileReader";
 import { getBaseMap } from "../GameMaps/maps";
+import { getUiScale, getWorldZoom } from "../ui/layout";
 
 const SCOREBOARD_DURATION_MS = 5000;
 
-/** Camera zoom while playing (players can change it with the wheel). */
-const PLAY_ZOOM = 0.6;
-/** Screen space the interface covers at the top and bottom. */
+/** Camera zoom while playing, at the 1280×720 design size (players can change it with the wheel). */
+export const PLAY_ZOOM = 0.6;
+/** Screen space the interface covers at the top and bottom (at the design size). */
 const HUD_TOP = 180;
 const HUD_BOTTOM = 110;
 const FRAME_MARGIN = 60;
@@ -250,21 +251,26 @@ export class GameStateHandler {
         const camera = this.scene.cameras.main;
         const bounds = this.currentMap.bounds;
 
-        const availableWidth = camera.width - FRAME_MARGIN * 2;
-        const availableHeight =
-            camera.height - HUD_TOP - HUD_BOTTOM - FRAME_MARGIN;
+        // The interface grows with the window, and so does the space it covers
+        const uiScale = getUiScale(this.scene);
+        const hudTop = HUD_TOP * uiScale;
+        const hudBottom = HUD_BOTTOM * uiScale;
+        const margin = FRAME_MARGIN * uiScale;
+
+        const availableWidth = camera.width - margin * 2;
+        const availableHeight = camera.height - hudTop - hudBottom - margin;
 
         const zoom = Phaser.Math.Clamp(
             Math.min(
                 availableWidth / bounds.width,
                 availableHeight / bounds.height,
             ),
-            0.3,
-            1,
+            getWorldZoom(this.scene, 0.3),
+            getWorldZoom(this.scene, 1),
         );
 
         // Centre the course in the free area, not the whole screen
-        const freeCenterY = HUD_TOP + availableHeight / 2 + FRAME_MARGIN / 2;
+        const freeCenterY = hudTop + availableHeight / 2 + margin / 2;
         const offsetY = (freeCenterY - camera.height / 2) / zoom;
 
         camera.stopFollow();
@@ -274,10 +280,28 @@ export class GameStateHandler {
         this.framingCourse = true;
     }
 
+    /**
+     * The window changed size. `ratio` is how much the view scale changed;
+     * the camera keeps showing the same part of the course.
+     */
+    onViewResize(ratio: number) {
+        const camera = this.scene.cameras.main;
+
+        this.currentMap.resizeBackground(camera.width, camera.height);
+
+        if (this.framingCourse) {
+            this.frameCourse();
+        } else {
+            camera.setZoom(camera.zoom * ratio);
+        }
+    }
+
     /** Back to the playing view: normal zoom, following your ball. */
     private playCamera() {
         if (this.framingCourse) {
-            this.scene.cameras.main.setZoom(PLAY_ZOOM);
+            this.scene.cameras.main.setZoom(
+                getWorldZoom(this.scene, PLAY_ZOOM),
+            );
             this.framingCourse = false;
         }
 

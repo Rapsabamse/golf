@@ -44,6 +44,11 @@ export class PowerBar {
         this.number.setPosition(BAR_WIDTH + NUMBER_GAP, 1);
     }
 
+    /** Move the bar so it is centred on (centerX, centerY). */
+    setCenter(centerX: number, centerY: number) {
+        this.container.setPosition(centerX - BAR_WIDTH / 2, centerY);
+    }
+
     /** `charge` is 0..1 of full power; undefined hides the bar. */
     setCharge(charge: number | undefined) {
         if (charge === undefined) {

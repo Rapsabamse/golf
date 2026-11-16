@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
 import { COLORS } from '../ui/theme';
+import { applyUiScale } from '../ui/layout';
 
 export class Preloader extends Scene
 {
@@ -10,11 +11,13 @@ export class Preloader extends Scene
 
     init ()
     {
-        const centerX = this.scale.width / 2;
-        const centerY = this.scale.height / 2;
+        //  Sized to the window (in interface units, see ui/layout.ts)
+        const { width, height } = applyUiScale(this);
+        const centerX = width / 2;
+        const centerY = height / 2;
 
         //  Starfield behind the loading bar, like the rest of the game
-        this.add.tileSprite(centerX, centerY, this.scale.width, this.scale.height, 'space');
+        this.add.tileSprite(centerX, centerY, width, height, 'space');
 
         //  A thin fairway-green bar on a dark track
         const trackWidth = 320;

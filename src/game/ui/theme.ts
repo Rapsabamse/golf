@@ -67,7 +67,8 @@ export function addText(
         fontSize: `${options.size ?? TYPE.body}px`,
         color: options.color ?? CSS.text,
         align: options.align ?? "left",
-        resolution: Math.min(window.devicePixelRatio || 1, 2),
+        // Sharp when the interface is scaled up on big screens
+        resolution: Math.min(3, Math.max(2, (window.devicePixelRatio || 1) * 2)),
     };
 
     if (options.wrap) {

@@ -20,8 +20,13 @@ export class PlayerPanel {
         private readonly network: Network,
     ) {
         this.container = scene.add
-            .container(scene.scale.width - MARGIN - WIDTH, MARGIN)
+            .container(0, MARGIN)
             .setVisible(false);
+    }
+
+    /** Keep the panel in the top-right corner of a screen this wide. */
+    setScreenWidth(width: number) {
+        this.container.x = width - MARGIN - WIDTH;
     }
 
     update(gameState: GameState) {

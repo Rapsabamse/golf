@@ -29,17 +29,21 @@ export class TiledMapLoader {
         const bodies: MatterJS.BodyType[] = [];
         const wallGraphics: Phaser.GameObjects.Graphics[] = [];
 
-        // Add the background
+        // Add the background. It doesn't scroll, but it is scaled by the
+        // camera zoom, so it is made big enough to cover the screen when
+        // zoomed all the way out.
         const background = scene.add
-            .tileSprite(
-                scene.scale.width / 2,
-                scene.scale.height / 2,
-                scene.scale.width * 3,
-                scene.scale.height * 3,
-                "space",
-            )
+            .tileSprite(0, 0, 1, 1, "space")
             .setScrollFactor(0)
             .setDepth(-100);
+
+        const resizeBackground = (width: number, height: number) => {
+            background
+                .setPosition(width / 2, height / 2)
+                .setSize(width * 4, height * 4);
+        };
+
+        resizeBackground(scene.scale.width, scene.scale.height);
 
         const grassTileset = map.addTilesetImage("Grass", "grass");
 
@@ -94,6 +98,8 @@ export class TiledMapLoader {
 
         return {
             goal,
+
+            resizeBackground,
 
             bounds: new Phaser.Geom.Rectangle(
                 0,

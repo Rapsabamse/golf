@@ -39,16 +39,37 @@ export class Scoreboard {
     private readonly container: Phaser.GameObjects.Container;
     private countdown?: Phaser.Time.TimerEvent;
 
+    /** Screen size in interface units, set by layout(). */
+    private screenWidth = 0;
+    private screenHeight = 0;
+
+    /** What is on show, so a resize can redraw it. */
+    private current?: { players: Player[]; ownId: string; endsAt: number };
+
     constructor(private readonly scene: Phaser.Scene) {
         this.container = scene.add.container(0, 0).setDepth(10);
         this.container.setVisible(false);
     }
 
-    show(players: Player[], ownId: string, durationMs: number) {
+    /** Called on every resize with the screen size in interface units. */
+    layout(width: number, height: number) {
+        this.screenWidth = width;
+        this.screenHeight = height;
+
+        if (this.current && this.container.visible) {
+            const { players, ownId, endsAt } = this.current;
+            this.show(players, ownId, Math.max(0, endsAt - Date.now()), false);
+        }
+    }
+
+    show(players: Player[], ownId: string, durationMs: number, animate = true) {
         this.container.removeAll(true);
         this.countdown?.remove();
 
-        const { width: screenWidth, height: screenHeight } = this.scene.scale;
+        this.current = { players, ownId, endsAt: Date.now() + durationMs };
+
+        const screenWidth = this.screenWidth;
+        const screenHeight = this.screenHeight;
 
         // Players who played every hole rank first, then by fewest shots
         const sorted = [...players].sort(
@@ -228,33 +249,52 @@ export class Scoreboard {
         });
 
         // Countdown to the next hole
-        let secondsLeft = Math.round(durationMs / 1000);
-        countdownText.setText(`Next hole in ${secondsLeft}`);
+        let secondsLeft = Math.ceil(durationMs / 1000);
+        const countdownLabel = () =>
+            secondsLeft > 0 ? `Next hole in ${secondsLeft}` : "Teeing off";
 
-        this.countdown = this.scene.time.addEvent({
-            delay: 1000,
-            repeat: secondsLeft - 1,
-            callback: () => {
-                secondsLeft -= 1;
-                countdownText.setText(
-                    secondsLeft > 0 ? `Next hole in ${secondsLeft}` : "Teeing off",
-                );
-            },
-        });
+        countdownText.setText(countdownLabel());
 
-        // One entrance: the card settles in
-        this.container.setVisible(true).setAlpha(0);
-        this.scene.tweens.add({
-            targets: this.container,
-            alpha: 1,
-            duration: 250,
-            ease: "Quad.easeOut",
-        });
+        if (secondsLeft > 0) {
+            // Tick on the whole seconds that remain
+            this.countdown = this.scene.time.addEvent({
+                delay: durationMs - (secondsLeft - 1) * 1000,
+                callback: () => {
+                    secondsLeft -= 1;
+                    countdownText.setText(countdownLabel());
+
+                    if (secondsLeft > 0) {
+                        this.countdown = this.scene.time.addEvent({
+                            delay: 1000,
+                            repeat: secondsLeft - 1,
+                            callback: () => {
+                                secondsLeft -= 1;
+                                countdownText.setText(countdownLabel());
+                            },
+                        });
+                    }
+                },
+            });
+        }
+
+        // One entrance: the card settles in (not again when redrawn on resize)
+        this.container.setVisible(true);
+
+        if (animate) {
+            this.container.setAlpha(0);
+            this.scene.tweens.add({
+                targets: this.container,
+                alpha: 1,
+                duration: 250,
+                ease: "Quad.easeOut",
+            });
+        }
     }
 
     hide() {
         this.countdown?.remove();
         this.countdown = undefined;
+        this.current = undefined;
         this.container.setVisible(false);
     }
 

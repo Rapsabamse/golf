@@ -11,6 +11,13 @@ import { TiledMapLoader } from "../GameMaps/TileReader";
 import { getBaseMap } from "../GameMaps/maps";
 import { GameStateHandler } from "../handlers/GameStateHandler";
 import { SoundEffects } from "../GameComponents/SoundEffects";
+import {
+    applyUiScale,
+    getViewScale,
+    getWorldZoom,
+    onResize,
+} from "../ui/layout";
+import { PLAY_ZOOM } from "../handlers/GameStateHandler";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -35,7 +42,7 @@ export class Game extends Phaser.Scene {
     create(data: { playerName: string }) {
         this.camera = this.cameras.main;
         this.camera.setBackgroundColor(0x00ff00);
-        this.camera.setZoom(0.6);
+        this.camera.setZoom(getWorldZoom(this, PLAY_ZOOM));
 
         this.network = new Network();
 
@@ -88,13 +95,20 @@ export class Game extends Phaser.Scene {
                     _deltaX: number,
                     deltaY: number,
                 ) => {
+                    // Zoom limits are relative to the window size, so every
+                    // screen can zoom in and out by the same amount
+                    const viewScale = getViewScale(this);
                     const zoomAmount = 0.1;
 
-                    const targetZoom = Phaser.Math.Clamp(
-                        this.camera.zoom - Math.sign(deltaY) * zoomAmount,
-                        0.3,
-                        1.0,
-                    );
+                    const targetZoom =
+                        Phaser.Math.Clamp(
+                            this.camera.zoom / viewScale -
+                                Math.sign(deltaY) * zoomAmount,
+                            0.3,
+                            1.0,
+                        ) * viewScale;
+
+                    this.tweens.killTweensOf(this.camera);
 
                     this.tweens.add({
                         targets: this.camera,
@@ -104,6 +118,27 @@ export class Game extends Phaser.Scene {
                     });
                 },
             );
+
+        // Follow the window size
+        let lastViewScale = getViewScale(this);
+
+        onResize(this, () => {
+            const viewScale = getViewScale(this);
+            const ratio = viewScale / lastViewScale;
+            lastViewScale = viewScale;
+
+            this.tweens.killTweensOf(this.camera);
+
+            if (this.gameStateHandler) {
+                this.gameStateHandler.onViewResize(ratio);
+            } else {
+                this.camera.setZoom(this.camera.zoom * ratio);
+                this.currentMap.resizeBackground(
+                    this.camera.width,
+                    this.camera.height,
+                );
+            }
+        });
 
         EventBus.emit("current-scene-ready", this);
     }
@@ -124,6 +159,16 @@ export class Game extends Phaser.Scene {
 
         //Create the scoreboard
         this.scoreboard = new Scoreboard(hud);
+
+        // Anchor the interface to the screen edges, now and on every resize
+        const layoutInterface = () => {
+            const { width, height } = applyUiScale(hud);
+            this.ui.layout(width, height);
+            this.scoreboard.layout(width, height);
+        };
+
+        layoutInterface();
+        onResize(hud, layoutInterface);
 
         //Create the gamestateHandler
         this.gameStateHandler = new GameStateHandler(

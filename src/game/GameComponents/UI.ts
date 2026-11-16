@@ -69,8 +69,10 @@ export class GameUI {
         this.create();
     }
 
+    /** Everything is placed properly by layout(), called right after this. */
     private create() {
-        const { width, height } = this.scene.scale;
+        const width = 0;
+        const height = 0;
 
         // Status card
         this.cardBackground = this.scene.add.graphics();
@@ -203,6 +205,19 @@ export class GameUI {
                 duration: 300,
             });
         });
+    }
+
+    /**
+     * Anchor everything to the screen edges. `width`/`height` are the screen
+     * size in interface units (see ui/layout.ts). Called on every resize.
+     */
+    layout(width: number, height: number) {
+        // The status card stays top-left at (MARGIN, MARGIN)
+        this.actionButton.setPosition(width / 2, height - MARGIN - 34);
+        this.toast.setPosition(width / 2, height - MARGIN - 150);
+        this.powerBar.setCenter(width / 2, height - MARGIN - 100);
+        this.controls.setPosition(MARGIN, height - MARGIN);
+        this.playerPanel.setScreenWidth(width);
     }
 
     /** Show the charge while aiming (0..1), or hide the bar with undefined. */
@@ -377,10 +392,7 @@ export class GameUI {
 
     /** Key hints bottom-left: [M] Sound on   [Scroll] Zoom   [Enter] … */
     private createControls() {
-        this.controls = this.scene.add.container(
-            MARGIN,
-            this.scene.scale.height - MARGIN,
-        );
+        this.controls = this.scene.add.container(MARGIN, 0);
     }
 
     private updateControls() {

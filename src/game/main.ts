@@ -2,7 +2,7 @@ import { Boot } from "./scenes/Boot";
 import { GameOver } from "./scenes/GameOver";
 import { Game as MainGame } from "./scenes/Game";
 import { MainMenu } from "./scenes/MainMenu";
-import { AUTO, Game } from "phaser";
+import { AUTO, Game, Scale } from "phaser";
 import { Preloader } from "./scenes/Preloader";
 import { Hud } from "./scenes/Hud";
 
@@ -10,9 +10,14 @@ import { Hud } from "./scenes/Hud";
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
     type: AUTO,
-    width: 1280,
-    height: 720,
     parent: "game-container",
+    // Fill the browser window and follow it when it changes size; scenes
+    // re-anchor their interface (see ui/layout.ts)
+    scale: {
+        mode: Scale.RESIZE,
+        width: "100%",
+        height: "100%",
+    },
     backgroundColor: "#028af8",
     scene: [Boot, Preloader, MainMenu, MainGame, Hud, GameOver],
 

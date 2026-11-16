@@ -7,6 +7,9 @@ export interface GeneratedMap {
     /** The area the course covers, in world coordinates. */
     bounds: Phaser.Geom.Rectangle;
 
+    /** Fit the starfield behind the course to a screen of this size. */
+    resizeBackground(width: number, height: number): void;
+
     getBallSpawnPosition(
         playerIndex: number,
         playerCount: number,

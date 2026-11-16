@@ -5,6 +5,7 @@ import { EventBus } from "../EventBus";
 import { getRandomName } from "../GameHelpers/MenuHelpers";
 import { Button } from "../ui/Button";
 import { COLORS, CSS, FONTS, TYPE, addText, drawPennant } from "../ui/theme";
+import { DESIGN_HEIGHT, applyUiScale, onResize } from "../ui/layout";
 
 const PAD_WIDTH = 460;
 const PAD_HEIGHT = 180;
@@ -26,27 +27,30 @@ export class MainMenu extends Scene {
     private joinButton!: Button;
     private padTop = 0;
 
+    private background!: Phaser.GameObjects.TileSprite;
+    /** Title, green and button, laid out around x = 0 at the 1280×720 design height. */
+    private menu!: Phaser.GameObjects.Container;
+    private uiScale = 1;
+
     constructor() {
         super("MainMenu");
     }
 
     create() {
-        const { width, height } = this.scale;
-        const centerX = width / 2;
-
-        this.add.tileSprite(centerX, height / 2, width, height, "space");
+        this.background = this.add.tileSprite(0, 0, 1, 1, "space");
+        this.menu = this.add.container(0, 0);
 
         // Title
-        addText(this, centerX, 150, "GOLF - golf", {
+        const title = addText(this, 0, 150, "GOLF - golf", {
             size: TYPE.display,
             bold: true,
         })
             .setOrigin(0.5)
             .setLetterSpacing(2);
 
-        addText(
+        const tagline = addText(
             this,
-            centerX,
+            0,
             228,
             "Mini golf where everyone putts at once.",
             { size: TYPE.label, color: CSS.muted },
@@ -54,9 +58,9 @@ export class MainMenu extends Scene {
 
         // The putting green the name field sits on
         this.padTop = 300;
-        this.drawPad(centerX - PAD_WIDTH / 2, this.padTop);
+        const pad = this.drawPad(-PAD_WIDTH / 2, this.padTop);
 
-        addText(this, centerX, this.padTop + 34, "Your name", {
+        const nameLabel = addText(this, 0, this.padTop + 34, "Your name", {
             size: TYPE.body,
             bold: true,
             color: CSS.ink,
@@ -64,15 +68,34 @@ export class MainMenu extends Scene {
 
         this.joinButton = new Button(
             this,
-            centerX,
+            0,
             this.padTop + PAD_HEIGHT + PAD_LIP + 60,
             "Join game",
             INPUT_WIDTH,
         ).setOnClick(() => this.changeScene());
 
+        this.menu.add([title, tagline, pad, nameLabel, this.joinButton]);
+
         this.createNameInput();
 
+        this.layout();
+        onResize(this, () => this.layout());
+
         EventBus.emit("current-scene-ready", this);
+    }
+
+    /** Fill the screen with stars and keep the menu centred, at any size. */
+    private layout() {
+        const { width, height, scale } = applyUiScale(this);
+        this.uiScale = scale;
+
+        this.background
+            .setPosition(width / 2, height / 2)
+            .setSize(width, height);
+
+        this.menu.setPosition(width / 2, (height - DESIGN_HEIGHT) / 2);
+
+        this.positionNameInput();
     }
 
     changeScene() {
@@ -112,6 +135,8 @@ export class MainMenu extends Scene {
         pad.fillEllipse(holeX, holeY, 26, 12);
 
         drawPennant(pad, holeX, holeY, 56, COLORS.panel, COLORS.text);
+
+        return pad;
     }
 
     private createNameInput() {
@@ -132,9 +157,6 @@ export class MainMenu extends Scene {
 
         document.body.appendChild(this.nameInput);
 
-        this.positionNameInput();
-        window.addEventListener("resize", this.positionNameInput);
-
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
             this.removeNameInput(),
         );
@@ -143,29 +165,35 @@ export class MainMenu extends Scene {
     }
 
     private removeNameInput() {
-        window.removeEventListener("resize", this.positionNameInput);
         this.nameInput?.remove();
     }
 
-    /** Keep the HTML field over the pad, wherever the canvas sits on the page. */
-    private positionNameInput = () => {
-        const canvas = this.game.canvas;
-        const bounds = canvas.getBoundingClientRect();
-        const scale = bounds.width / this.scale.width;
+    /** Keep the HTML field over the green, wherever the canvas sits and however it is scaled. */
+    private positionNameInput() {
+        if (!this.nameInput) {
+            return;
+        }
+
+        const bounds = this.game.canvas.getBoundingClientRect();
+        // Interface units to CSS pixels
+        const toCss = this.uiScale * (bounds.width / this.scale.width);
 
         const centerX =
-            bounds.left + window.scrollX + (this.scale.width / 2) * scale;
+            bounds.left + window.scrollX + this.menu.x * toCss;
         const centerY =
-            bounds.top + window.scrollY + (this.padTop + 108) * scale;
+            bounds.top +
+            window.scrollY +
+            (this.menu.y + this.padTop + 108) * toCss;
 
         Object.assign(this.nameInput.style, {
             left: `${centerX}px`,
             top: `${centerY}px`,
-            width: `${INPUT_WIDTH * scale}px`,
-            height: `${INPUT_HEIGHT * scale}px`,
-            fontSize: `${22 * scale}px`,
+            width: `${INPUT_WIDTH * toCss}px`,
+            height: `${INPUT_HEIGHT * toCss}px`,
+            fontSize: `${22 * toCss}px`,
+            borderRadius: `${14 * toCss}px`,
         });
-    };
+    }
 
     private injectInputStyle() {
         if (document.getElementById(STYLE_ID)) {
