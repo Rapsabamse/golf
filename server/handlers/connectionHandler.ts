@@ -1,6 +1,7 @@
 import { ServerContext } from "../serverState";
 import {
     broadcastPlayerList,
+    fillMissedHoles,
     getCurrentMapName,
     getScoringPlayers,
     pickColor,
@@ -29,6 +30,18 @@ export function handleConnection(
         name: "Player",
         color: pickColor(ctx),
     };
+
+    // Joining mid-game: take the worst score of each hole already finished.
+    // (After the last hole the game is over and every hole is finished.)
+    fillMissedHoles(
+        ctx,
+        player,
+        ctx.gameState === GameState.GAME_OVER
+            ? ctx.holeIndex + 1
+            : ctx.gameState === GameState.WAITING
+              ? 0
+              : ctx.holeIndex,
+    );
 
     ctx.players.set(playerId, player);
 

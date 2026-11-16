@@ -70,11 +70,40 @@ function clearRoundTracking(ctx: ServerContext) {
     ctx.mapLoaded.clear();
 }
 
+/**
+ * Give a player who joined late the worst score of every finished hole they
+ * didn't play, so they can't win by missing holes.
+ */
+export function fillMissedHoles(
+    ctx: ServerContext,
+    player: Player,
+    finishedHoles: number,
+) {
+    player.state ??= { points: [] };
+
+    for (let hole = 0; hole < finishedHoles; hole++) {
+        const worst = ctx.holeMaxShots[hole];
+
+        if (
+            worst === undefined ||
+            (player.state.points[hole] !== null &&
+                player.state.points[hole] !== undefined)
+        ) {
+            continue;
+        }
+
+        player.state.points[hole] = worst;
+        player.state.missedHoles ??= [];
+        player.state.missedHoles.push(hole);
+    }
+}
+
 /** Host pressed "Start Game" in the lobby. */
 export function startGame(ctx: ServerContext) {
     console.log("Starting planning phase");
 
     ctx.holeIndex = 0;
+    ctx.holeMaxShots = [];
     ctx.ballLocations = [];
     clearRoundTracking(ctx);
 
@@ -108,6 +137,7 @@ export function resetGame(ctx: ServerContext) {
 
     ctx.gameState = GameState.WAITING;
     ctx.holeIndex = 0;
+    ctx.holeMaxShots = [];
     ctx.ballLocations = [];
     clearRoundTracking(ctx);
 
@@ -248,6 +278,12 @@ export function applyGoal(ctx: ServerContext, scoringPlayerId: string) {
     player.state ??= { points: [] };
     player.state.points[ctx.holeIndex] = player.roundState.shots;
 
+    // Counts even if this player leaves before the hole ends
+    ctx.holeMaxShots[ctx.holeIndex] = Math.max(
+        ctx.holeMaxShots[ctx.holeIndex] ?? 0,
+        player.roundState.shots,
+    );
+
     console.log(
         "Player ",
         scoringPlayerId,
@@ -283,6 +319,11 @@ export function tryCompleteRound(ctx: ServerContext) {
 
     ctx.ballLocations = [];
     clearRoundTracking(ctx);
+
+    // Whoever joined during this hole gets its worst score
+    for (const player of ctx.players.values()) {
+        fillMissedHoles(ctx, player, ctx.holeIndex + 1);
+    }
 
     // Everyone, including late joiners, plays the next hole (or game)
     for (const player of ctx.players.values()) {

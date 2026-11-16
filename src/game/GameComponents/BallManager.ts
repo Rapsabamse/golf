@@ -4,9 +4,11 @@ import { Network } from "../Networking/Network";
 import { GeneratedMap } from "../GameMaps/Type";
 import { SoundEffects } from "./SoundEffects";
 import { FONTS } from "../ui/theme";
+import { BallSkin } from "./BallSkin";
 
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
+    skin: BallSkin;
     label: Phaser.GameObjects.Text;
     body: MatterJS.BodyType;
     inWorld: boolean;
@@ -78,6 +80,7 @@ export class BallManager {
             this.scene.matter.body.setPosition(ball.body, position);
 
             ball.visual.setPosition(position.x, position.y);
+            ball.skin.jumpTo(position.x, position.y);
         });
     }
 
@@ -110,6 +113,11 @@ export class BallManager {
                 x: 0,
                 y: 0,
             });
+
+            if (ball.inWorld) {
+                ball.visual.setPosition(location.x, location.y);
+                ball.skin.jumpTo(location.x, location.y);
+            }
         }
     }
 
@@ -151,6 +159,8 @@ export class BallManager {
                     ball.body.position.y,
                 );
             }
+
+            ball.skin.update();
 
             ball.label.setPosition(
                 ball.visual.x,
@@ -225,6 +235,8 @@ export class BallManager {
             .circle(position.x, position.y, BALLRADIUS, DEFAULT_BALL_COLOR)
             .setDepth(1000);
 
+        const skin = new BallSkin(this.scene, visual, BALLRADIUS);
+
         const label = this.scene.add
             .text(position.x, position.y - LABEL_OFFSET_Y, "", {
                 fontFamily: FONTS.bold,
@@ -249,6 +261,7 @@ export class BallManager {
 
         return {
             visual,
+            skin,
             label,
             body,
             inWorld: true,
@@ -262,10 +275,14 @@ export class BallManager {
 
         ball.color = player.color ?? DEFAULT_BALL_COLOR;
 
+        // Your own ball gets a thicker outline so it's easy to spot
+        const outlineWidth = isOwn ? 4 : 2;
+
         ball.visual
             .setFillStyle(ball.color)
-            // Your own ball gets a thicker outline so it's easy to spot
-            .setStrokeStyle(isOwn ? 4 : 2, isOwn ? 0x000000 : 0x333333);
+            .setStrokeStyle(outlineWidth, isOwn ? 0x000000 : 0x333333);
+
+        ball.skin.setColor(ball.color, outlineWidth);
 
         ball.label
             .setText(isOwn ? `${player.name} (you)` : player.name)
@@ -380,6 +397,7 @@ export class BallManager {
         this.scene.tweens.killTweensOf(ball.visual);
 
         ball.visual.destroy();
+        ball.skin.destroy();
         ball.label.destroy();
 
         if (ball.inWorld) {

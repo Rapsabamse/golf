@@ -43,7 +43,10 @@ export function getPlayersList(
         color: player.color,
         ready: playersReady?.has(player.id) ?? false,
         roundState: player.roundState,
-        state: { points: player.state ? player.state.points : [] },
+        state: {
+            points: player.state ? player.state.points : [],
+            missedHoles: player.state?.missedHoles,
+        },
         waitingForNextRound: player.waitingForNextRound,
     }));
 }

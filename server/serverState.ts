@@ -26,6 +26,11 @@ export interface ServerContext {
     simulationReports: Map<string, SimulationReport>;
     /** Players who finished loading the next map after a round. */
     mapLoaded: Set<string>;
+    /**
+     * Most shots anyone needed on each hole, indexed by hole number. Late
+     * joiners get this score for the holes they missed.
+     */
+    holeMaxShots: number[];
 }
 
 export function createServerContext(): ServerContext {
@@ -38,5 +43,6 @@ export function createServerContext(): ServerContext {
         playersReady: new Set(),
         simulationReports: new Map(),
         mapLoaded: new Set(),
+        holeMaxShots: [],
     };
 }

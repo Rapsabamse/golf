@@ -68,6 +68,11 @@ export interface PlayerState {
      * didn't play (e.g. they joined later) is null.
      */
     points: (number | null)[];
+    /**
+     * Holes the player missed by joining late. Their score there is the most
+     * shots anyone needed on that hole.
+     */
+    missedHoles?: number[];
 }
 
 export interface RoundState {

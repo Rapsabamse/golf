@@ -18,10 +18,15 @@ const HOLE_WIDTH = 46;
 const TOTAL_WIDTH = 70;
 /** Older holes scroll off so the card always fits the screen. */
 const MAX_HOLE_COLUMNS = 12;
+/** Space under the table for the note about missed holes. */
+const NOTE_HEIGHT = 34;
 /** Space under the table for Play again on the final scores. */
 const FINAL_FOOTER_HEIGHT = 96;
 
-/** Total shots, skipping holes the player didn't play. */
+/**
+ * Total shots. Holes missed by joining late already hold that hole's worst
+ * score (the server fills them in), so everyone is compared over every hole.
+ */
 function getTotal(player: Player) {
     return (player.state?.points ?? []).reduce<number>(
         (sum, score) => sum + (score ?? 0),
@@ -29,18 +34,20 @@ function getTotal(player: Player) {
     );
 }
 
-function getHolesPlayed(player: Player) {
-    return (player.state?.points ?? []).filter((score) => score !== null)
-        .length;
+/** Like in golf: fewest shots first. */
+function rank(players: Player[]) {
+    return [...players].sort((a, b) => getTotal(a) - getTotal(b));
 }
 
-/** Players who played every hole rank first, then by fewest shots. */
-function rank(players: Player[]) {
-    return [...players].sort(
-        (a, b) =>
-            getHolesPlayed(b) - getHolesPlayed(a) ||
-            getTotal(a) - getTotal(b),
-    );
+/** Place on the table; players with the same total share it. */
+function getPlace(player: Player, players: Player[]) {
+    const total = getTotal(player);
+    return 1 + players.filter((other) => getTotal(other) < total).length;
+}
+
+function hasMissedHole(player: Player, holes: number[]) {
+    const missed = player.state?.missedHoles ?? [];
+    return holes.some((hole) => missed.includes(hole));
 }
 
 /** Between holes: standings with a countdown to the next hole. */
@@ -145,26 +152,23 @@ export class Scoreboard {
 
         const sorted = rank(players);
 
-        // Everyone level with the best player (same holes, same total) leads
-        const best = sorted[0];
-        const leaders =
-            best && getHolesPlayed(best) > 0
-                ? sorted.filter(
-                      (player) =>
-                          getHolesPlayed(player) === getHolesPlayed(best) &&
-                          getTotal(player) === getTotal(best),
-                  )
-                : [];
-
         const holeCount = Math.max(
             0,
             ...sorted.map((player) => player.state?.points.length ?? 0),
         );
+
+        // Fewest shots leads; everyone on the same total shares the lead
+        const leaders =
+            holeCount > 0
+                ? sorted.filter((player) => getPlace(player, sorted) === 1)
+                : [];
         const firstHole = Math.max(0, holeCount - MAX_HOLE_COLUMNS);
         const holes = Array.from(
             { length: holeCount - firstHole },
             (_, i) => firstHole + i,
         );
+
+        const showNote = sorted.some((player) => hasMissedHole(player, holes));
 
         const cardWidth =
             PADDING * 2 +
@@ -178,6 +182,7 @@ export class Scoreboard {
             30 +
             34 +
             sorted.length * ROW_HEIGHT +
+            (showNote ? NOTE_HEIGHT : 0) +
             (isFinal ? FINAL_FOOTER_HEIGHT : 0);
 
         const left = Math.round((screenWidth - cardWidth) / 2);
@@ -244,7 +249,7 @@ export class Scoreboard {
         y += 34;
 
         // Rows
-        sorted.forEach((player, index) => {
+        sorted.forEach((player) => {
             const centerY = y + ROW_HEIGHT / 2;
             const isOwn = player.id === ownId;
             const isLeader = leaders.includes(player);
@@ -276,7 +281,7 @@ export class Scoreboard {
                         this.scene,
                         left + PADDING + 4,
                         centerY,
-                        `${index + 1}`,
+                        `${getPlace(player, sorted)}`,
                         { size: TYPE.body, color: CSS.muted },
                     ).setOrigin(0, 0.5),
                 );
@@ -302,9 +307,11 @@ export class Scoreboard {
             this.container.add([dot, name]);
 
             const points = player.state?.points ?? [];
+            const missedHoles = player.state?.missedHoles ?? [];
 
             holes.forEach((hole, column) => {
                 const score = points[hole];
+                const missed = missedHoles.includes(hole);
 
                 this.container.add(
                     addText(
@@ -315,11 +322,16 @@ export class Scoreboard {
                         {
                             size: TYPE.body,
                             color:
-                                score === null || score === undefined
+                                score === null ||
+                                score === undefined ||
+                                missed
                                     ? CSS.muted
                                     : CSS.text,
                         },
-                    ).setOrigin(0.5),
+                    )
+                        .setOrigin(0.5)
+                        // Scores given for a missed hole are faded out
+                        .setAlpha(missed ? 0.45 : 1),
                 );
             });
 
@@ -333,6 +345,20 @@ export class Scoreboard {
 
             y += ROW_HEIGHT;
         });
+
+        if (showNote) {
+            this.container.add(
+                addText(
+                    this.scene,
+                    left + PADDING,
+                    y + NOTE_HEIGHT / 2,
+                    "Faded: missed hole, counted as its most shots",
+                    { size: TYPE.small, color: CSS.muted },
+                ).setOrigin(0, 0.5),
+            );
+
+            y += NOTE_HEIGHT;
+        }
 
         if (view.kind === "final") {
             this.addFinalFooter(view, left, cardWidth, y);
