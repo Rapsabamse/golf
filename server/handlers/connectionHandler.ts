@@ -1,30 +1,35 @@
-import { sendPlayerList } from "../serverHelpers";
+import { ServerContext } from "../serverState";
+import {
+    broadcastPlayerList,
+    getCurrentMapName,
+    pickColor,
+} from "../gameLogic";
 import { GameState, MessageTypeServer, Player } from "../types/types";
 import { WebSocket } from "ws";
 
 export function handleConnection(
     socket: WebSocket,
-    players: Map<string, Player>,
-    gameState: GameState,
     playerId: string,
-    setHostId: (id: string) => void,
-    getHostId: () => string | undefined,
+    ctx: ServerContext,
 ) {
+    const shouldWait = ctx.gameState !== GameState.WAITING;
+
     const player: Player = {
         id: playerId,
         socket,
         state: { points: [] },
-        waitingForNextRound: gameState != GameState.WAITING,
-        name: "",
+        waitingForNextRound: shouldWait,
+        name: "Player",
+        color: pickColor(ctx),
     };
 
-    players.set(playerId, player);
+    ctx.players.set(playerId, player);
 
     console.log(`Player connected: ${playerId}`);
-    console.log(`Players: ${players.size}`);
+    console.log(`Players: ${ctx.players.size}`);
 
-    if (!getHostId()) {
-        setHostId(playerId);
+    if (!ctx.hostId) {
+        ctx.hostId = playerId;
     }
 
     // Tell the client which ID belongs to them
@@ -35,18 +40,20 @@ export function handleConnection(
         }),
     );
 
-    // Send the current game state to the client
+    // Send the current game state and map to the client
     socket.send(
         JSON.stringify({
             type: MessageTypeServer.GAME_STATE,
             data: {
-                state: gameState,
-                isHost: getHostId() === playerId,
-                shouldWait: gameState != GameState.WAITING,
+                state: ctx.gameState,
+                isHost: ctx.hostId === playerId,
+                shouldWait,
+                mapName: getCurrentMapName(ctx),
+                hole: ctx.holeIndex + 1,
             },
         }),
     );
 
     // Send the updated player list to everyone
-    sendPlayerList(players, getHostId());
+    broadcastPlayerList(ctx);
 }

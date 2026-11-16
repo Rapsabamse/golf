@@ -1,5 +1,17 @@
 import { WebSocket } from "ws";
 
+/**
+ * The holes in play order. Shared by the server (which decides which hole is
+ * being played) and the client (which loads the map with that name).
+ */
+export const MAPS = ["map1", "map2", "map3"];
+
+/**
+ * Fastest shot the server accepts. Matches the client's aim limit
+ * (maxForce 160 * forceMultiplier 0.25 in Controller.ts).
+ */
+export const MAX_SHOT_SPEED = 40;
+
 export enum MessageTypeClient {
     START_GAME,
     READY,
@@ -25,9 +37,18 @@ export enum GameState {
     ROUND_COMPLETE,
 }
 
+export interface Vector {
+    x: number;
+    y: number;
+}
+
 export interface Player {
     id: string;
     name: string;
+    /** Ball colour, e.g. 0xff5252. Unique within the game. */
+    color?: number;
+    /** Has locked in a shot this planning phase. */
+    ready?: boolean;
     socket?: WebSocket;
     state?: PlayerState;
     roundState?: RoundState;
@@ -36,17 +57,20 @@ export interface Player {
 }
 
 export interface PlayerState {
-    points: number[];
+    /**
+     * Shots taken per hole, indexed by hole number. A hole the player
+     * didn't play (e.g. they joined later) is null.
+     */
+    points: (number | null)[];
 }
 
 export interface RoundState {
-    position?: Phaser.Math.Vector2;
     shots: number;
     hasScored: boolean;
 }
 
 export interface PlayerShot {
-    direction: Phaser.Math.Vector2;
+    direction: Vector;
 }
 
 export interface ServerMessageData {
@@ -56,7 +80,6 @@ export interface ServerMessageData {
 
 export interface ServerData {
     state?: GameState;
-    playerData?: Map<string, Player>;
     playerId?: string;
     playerList?: Player[];
     ballLocations?: BallLocation[];
@@ -64,6 +87,10 @@ export interface ServerData {
     isHost?: boolean;
     shouldWait?: boolean;
     hostId?: string | undefined;
+    /** The map everyone should be on (or, for ROUND_COMPLETE, the next map). */
+    mapName?: string;
+    /** Hole number (1-based) that goes with mapName. */
+    hole?: number;
 }
 
 export interface BallLocation {

@@ -52,7 +52,7 @@ const randomNamesList: string[] = [
 ];
 
 export function getRandomName(): string {
-    let randomIndex = Math.floor(Math.random() * 50);
+    let randomIndex = Math.floor(Math.random() * randomNamesList.length);
 
     return randomNamesList[randomIndex];
 }

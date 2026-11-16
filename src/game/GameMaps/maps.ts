@@ -1,15 +1,8 @@
-let currentMap = -1;
+import { MAPS } from "../../../server/types/types";
 
-const maps = ["map1", "map2", "map3"];
-
-export function getNextMap() {
-    currentMap = (currentMap + 1) % maps.length;
-
-    return maps[currentMap];
-}
-
+// The server decides which map is being played and sends its name to the
+// clients, so every player is always on the same hole. This is just the
+// map shown in the lobby before the game starts.
 export function getBaseMap() {
-    currentMap = 0;
-
-    return maps[currentMap];
+    return MAPS[0];
 }

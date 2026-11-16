@@ -14,8 +14,11 @@ export class AimController {
     private readonly chargeSensitivity = 0.5;
     private readonly forceMultiplier = 0.25;
     private readonly aimLineMultiplier = 2;
+    /** Shots weaker than this are treated as a click, not a shot. */
+    private readonly minForce = 1;
 
     private canInteract = false;
+    private shotSelected = false;
 
     constructor(
         private readonly scene: Phaser.Scene,
@@ -24,10 +27,10 @@ export class AimController {
     ) {
         this.aimLine = scene.add.graphics().setDepth(99);
 
-        this.createInputs(network);
+        this.createInputs();
     }
 
-    private createInputs(network: Network) {
+    private createInputs() {
         this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
             if (
                 pointer.event.target !== this.scene.game.canvas ||
@@ -75,9 +78,18 @@ export class AimController {
 
             const { direction, force } = this.calculateLaunch(pointer);
 
+            // A click without dragging doesn't replace the current shot
+            if (force < this.minForce) {
+                if (!this.shotSelected) {
+                    this.aimLine.clear();
+                }
+                return;
+            }
+
             const velocity = direction.scale(force * this.forceMultiplier);
 
-            network.sendShot(velocity);
+            this.network.sendShot(velocity);
+            this.shotSelected = true;
         });
     }
 
@@ -131,8 +143,23 @@ export class AimController {
         };
     }
 
-    updateCanInteract(canInteranct: boolean) {
-        this.canInteract = canInteranct;
+    updateCanInteract(canInteract: boolean) {
+        this.canInteract = canInteract;
+
+        if (!canInteract) {
+            this.isDragging = false;
+        }
+    }
+
+    hasSelectedShot() {
+        return this.shotSelected;
+    }
+
+    /** Forget the shot from the last planning phase. */
+    resetShot() {
+        this.shotSelected = false;
+        this.isDragging = false;
+        this.aimLine.clear();
     }
 
     clearAimline() {

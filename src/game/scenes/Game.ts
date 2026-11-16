@@ -1,15 +1,16 @@
 import * as Phaser from "phaser";
 import { EventBus } from "../EventBus";
 import { Network } from "../Networking/Network";
-import { GameState, Player, ServerData } from "../../../server/types/types";
+import { Player } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
 import { GeneratedMap } from "../GameMaps/Type";
 import { Scoreboard } from "../GameComponents/Scoreboard";
 import { TiledMapLoader } from "../GameMaps/TileReader";
-import { getBaseMap, getNextMap } from "../GameMaps/maps";
+import { getBaseMap } from "../GameMaps/maps";
 import { GameStateHandler } from "../handlers/GameStateHandler";
+import { SoundEffects } from "../GameComponents/SoundEffects";
 
 export class Game extends Phaser.Scene {
     camera: Phaser.Cameras.Scene2D.Camera;
@@ -23,6 +24,7 @@ export class Game extends Phaser.Scene {
     private ui!: GameUI;
     private scoreboard!: Scoreboard;
     private gameStateHandler!: GameStateHandler;
+    private sounds = new SoundEffects();
 
     private scoredPlayers: string[] = [];
 
@@ -36,39 +38,6 @@ export class Game extends Phaser.Scene {
         this.camera.setZoom(0.6);
 
         this.network = new Network();
-        this.network.connect(data.playerName);
-
-        //Subscribe to playerListUpdates
-        this.network.onPlayerList = (
-            players: Player[],
-            self: Player | undefined,
-        ) => {
-            if (this.network.isLobbyWaiting()) {
-                this.ballManager.updateBalls(players, false);
-
-                //Kameran ska följa bollen
-                const ownBall = this.ballManager.getOwnBall();
-                if (ownBall) {
-                    this.camera.startFollow(ownBall.visual);
-                }
-            }
-
-            this.ui.updateUI(
-                this.network.getGameState(),
-                this.network.getIsHost(),
-                self?.waitingForNextRound,
-            );
-        };
-
-        //Handle when we get ready confirmation form server
-        this.network.onReadyConfirmed = () => {
-            this.ui.setReady();
-        };
-
-        //Subscribe to gamestateUpdates
-        this.network.onGameStateChange = (gamestate, data?) => {
-            this.gameStateHandler.handle(gamestate, data);
-        };
 
         // Create map
         const mapLoader = new TiledMapLoader();
@@ -81,6 +50,7 @@ export class Game extends Phaser.Scene {
             () => this.network.getPlayerId(),
             this.network,
             () => this.getScoringPlayers(),
+            this.sounds,
         );
 
         //Connect the ball entered goal event with hadleGoalReached on the ballmanager
@@ -95,35 +65,19 @@ export class Game extends Phaser.Scene {
             this.network,
         );
 
-        //Create UI
-        this.ui = new GameUI(
-            this,
-            this.network,
-            () => this.lockIn(),
-            () => this.haveIScored(),
-        );
+        // The interface lives in its own scene on top, so zooming the
+        // course doesn't move or scale it. Connect once it exists.
+        this.scene.launch("Hud");
+        const hud = this.scene.get("Hud");
 
-        //Create the scoreboard
-        this.scoreboard = new Scoreboard(this);
+        hud.events.once(Phaser.Scenes.Events.CREATE, () => {
+            this.createInterface(hud);
+            this.network.connect(data.playerName);
+        });
 
-        //Create the gamestateHandler
-        this.gameStateHandler = new GameStateHandler(
-            this,
-            this.network,
-            this.aimController,
-            this.ballManager,
-            this.ui,
-            this.scoreboard,
-            this.currentMap,
-            () => this.haveIScored(),
-            (players) => {
-                this.scoredPlayers = players;
-            },
-            () => this.scoredPlayers,
-            (map) => {
-                this.currentMap = map;
-            },
-        );
+        this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.scene.stop("Hud");
+        });
 
         this.input //Add zoom feature
             .on(
@@ -154,6 +108,83 @@ export class Game extends Phaser.Scene {
         EventBus.emit("current-scene-ready", this);
     }
 
+    private createInterface(hud: Phaser.Scene) {
+        //Create UI
+        this.ui = new GameUI(
+            hud,
+            this.network,
+            () => this.lockIn(),
+            () => this.haveIScored(),
+            () => this.sounds.isMuted(),
+        );
+
+        //Create the scoreboard
+        this.scoreboard = new Scoreboard(hud);
+
+        //Create the gamestateHandler
+        this.gameStateHandler = new GameStateHandler(
+            this,
+            this.network,
+            this.aimController,
+            this.ballManager,
+            this.ui,
+            this.scoreboard,
+            this.currentMap,
+            () => this.haveIScored(),
+            (players) => {
+                this.scoredPlayers = players;
+            },
+            (map) => {
+                this.currentMap = map;
+            },
+        );
+
+        //Subscribe to playerListUpdates
+        this.network.onPlayerList = (
+            players: Player[],
+            self: Player | undefined,
+        ) => {
+            if (this.network.isLobbyWaiting()) {
+                this.ballManager.updateBalls(players, false);
+
+                // Show the whole course while everyone gathers
+                this.gameStateHandler.frameCourse();
+            } else {
+                // Mid-game: only remove the balls of players who left
+                this.ballManager.removeMissingPlayers(players);
+            }
+
+            this.ui.updateUI(
+                this.network.getGameState(),
+                this.network.getIsHost(),
+                self?.waitingForNextRound,
+            );
+        };
+
+        //Handle when we get ready confirmation form server
+        this.network.onReadyConfirmed = () => {
+            this.sounds.lockIn();
+            this.ui.setReady();
+            this.aimController.updateCanInteract(false);
+        };
+
+        //Subscribe to gamestateUpdates
+        this.network.onGameStateChange = (gamestate, data?) => {
+            this.gameStateHandler.handle(gamestate, data);
+        };
+
+        // M toggles sound
+        this.input.keyboard?.on("keydown-M", () => {
+            this.sounds.toggleMute();
+            this.ui.refreshPlayerPanel(this.network.getGameState());
+        });
+
+        // Enter runs the main action (Start game / Lock in shot)
+        this.input.keyboard?.on("keydown-ENTER", () => {
+            this.ui.triggerAction();
+        });
+    }
+
     changeScene() {
         this.scene.start("GameOver");
     }
@@ -163,6 +194,12 @@ export class Game extends Phaser.Scene {
     }
 
     lockIn() {
+        // Locking in without aiming would waste a stroke
+        if (!this.aimController.hasSelectedShot()) {
+            this.ui.showHint("Aim first: drag back from your ball");
+            return;
+        }
+
         this.network.sendReady();
         this.aimController.updateCanInteract(false);
     }

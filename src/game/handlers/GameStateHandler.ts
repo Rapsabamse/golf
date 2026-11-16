@@ -7,9 +7,29 @@ import { GameUI } from "../GameComponents/UI";
 import { Scoreboard } from "../GameComponents/Scoreboard";
 import { GeneratedMap } from "../GameMaps/Type";
 import { TiledMapLoader } from "../GameMaps/TileReader";
-import { getBaseMap, getNextMap } from "../GameMaps/maps";
+import { getBaseMap } from "../GameMaps/maps";
+
+const SCOREBOARD_DURATION_MS = 5000;
+
+/** Camera zoom while playing (players can change it with the wheel). */
+const PLAY_ZOOM = 0.6;
+/** Screen space the interface covers at the top and bottom. */
+const HUD_TOP = 180;
+const HUD_BOTTOM = 110;
+const FRAME_MARGIN = 60;
 
 export class GameStateHandler {
+    private currentMapName = getBaseMap();
+
+    /** True while the camera shows the whole course instead of following a ball. */
+    private framingCourse = false;
+
+    /** The map switch scheduled after the scoreboard, if one is pending. */
+    private pendingMapLoad?: {
+        timer: Phaser.Time.TimerEvent;
+        run: () => void;
+    };
+
     constructor(
         private readonly scene: Phaser.Scene,
         private readonly network: Network,
@@ -20,56 +40,70 @@ export class GameStateHandler {
         private currentMap: GeneratedMap,
         private readonly haveIScored: () => boolean,
         private readonly setScoredPlayers: (players: string[]) => void,
-        private readonly getScoredPlayers: () => string[],
         private readonly setCurrentMap: (map: GeneratedMap) => void,
     ) {}
 
     handle(gamestate: GameState, data?: ServerData) {
         if (gamestate === GameState.WAITING) {
-            this.handleWaiting();
+            // Game was reset: drop the scheduled switch to the next hole
+            this.finishPendingMapLoad(false);
+        } else if (gamestate !== GameState.ROUND_COMPLETE) {
+            // The next round started before our scoreboard timer ran out
+            this.finishPendingMapLoad(true);
         }
 
-        if (gamestate === GameState.PLANNING) {
-            this.handlePlanning(data);
-        } else {
+        if (gamestate !== GameState.PLANNING) {
             this.aimController.updateCanInteract(false);
+            this.aimController.resetShot();
         }
 
+        if (data?.hole !== undefined && gamestate !== GameState.ROUND_COMPLETE) {
+            this.ui.setHole(data.hole);
+        }
+
+        // Keeps late joiners on the same hole as everyone else
         if (
-            gamestate === GameState.SIMULATING ||
-            gamestate === GameState.SIMULATING_HOST
+            data?.mapName &&
+            gamestate !== GameState.WAITING &&
+            gamestate !== GameState.ROUND_COMPLETE
         ) {
-            this.handleSimulating(gamestate, data);
+            this.ensureMap(data.mapName);
         }
 
-        if (gamestate === GameState.ROUND_COMPLETE) {
-            this.handleRoundComplete(data);
+        switch (gamestate) {
+            case GameState.WAITING:
+                this.handleWaiting(data);
+                break;
+
+            case GameState.PLANNING:
+                this.handlePlanning(data);
+                break;
+
+            case GameState.SIMULATING:
+            case GameState.SIMULATING_HOST:
+                this.handleSimulating(data);
+                break;
+
+            case GameState.ROUND_COMPLETE:
+                this.handleRoundComplete(data);
+                break;
         }
 
         this.ui.updateUI(gamestate, this.network.getIsHost(), data?.shouldWait);
     }
 
-    private handleWaiting() {
+    private handleWaiting(data?: ServerData) {
         this.setScoredPlayers([]);
+        this.scoreboard.hide();
 
-        this.aimController.updateCanInteract(false);
         this.aimController.clearAimline();
 
-        this.currentMap.destroy();
+        this.ensureMap(data?.mapName ?? getBaseMap());
 
-        const map = new TiledMapLoader().load(this.scene, getBaseMap());
+        // Recreate the balls so ones that were holed out become visible again
+        this.ballManager.updateBalls(this.network.getPlayers(), true);
 
-        this.setCurrentMap(map);
-        this.currentMap = map;
-
-        this.ballManager.setMap(map);
-        this.setupGoal();
-
-        this.ballManager.updateBalls(this.network.getPlayers(), false);
-
-        this.followOwnBall();
-
-        this.ui.updateUI(GameState.WAITING, this.network.getIsHost(), false);
+        this.frameCourse();
     }
 
     private handlePlanning(data?: ServerData) {
@@ -86,20 +120,25 @@ export class GameStateHandler {
             this.ballManager.updateScoringPlayers();
         }
 
-        this.aimController.updateCanInteract(!this.haveIScored());
+        this.aimController.updateCanInteract(
+            !this.haveIScored() && !data.shouldWait,
+        );
+
+        // Watching from the sidelines: show the whole course. Playing:
+        // follow your ball.
+        if (data.shouldWait) {
+            this.frameCourse();
+        } else if (this.framingCourse) {
+            this.playCamera();
+        }
     }
 
-    private handleSimulating(gamestate: GameState, data?: ServerData) {
+    private handleSimulating(data?: ServerData) {
         if (!data?.playerList) {
             return;
         }
 
-        this.aimController.clearAimline();
-
-        this.ballManager.simulateRound(
-            data.playerList,
-            gamestate === GameState.SIMULATING_HOST,
-        );
+        this.ballManager.simulateRound(data.playerList);
     }
 
     private handleRoundComplete(data?: ServerData) {
@@ -107,34 +146,118 @@ export class GameStateHandler {
             return;
         }
 
+        const playerList: Player[] = data.playerList;
+        const nextMap = data.mapName ?? this.currentMapName;
+        const nextHole = data.hole;
+
         this.setScoredPlayers([]);
+        this.scoreboard.show(
+            playerList,
+            this.network.getPlayerId(),
+            SCOREBOARD_DURATION_MS,
+        );
 
-        this.scoreboard.show(data.playerList);
-
-        this.scene.time.delayedCall(5000, () => {
+        const run = () => {
             this.scoreboard.hide();
+            this.ui.setHole(nextHole);
 
-            this.currentMap.destroy();
-
-            const map = new TiledMapLoader().load(this.scene, getNextMap());
-
-            this.setCurrentMap(map);
-            this.currentMap = map;
-
-            this.ballManager.setMap(map);
-            this.ballManager.updateBalls(data.playerList!, true);
-
-            this.setupGoal();
-            this.followOwnBall();
+            this.loadMap(nextMap);
+            this.ballManager.updateBalls(playerList, true);
+            this.playCamera();
 
             this.network.sendMapLoaded();
+        };
+
+        this.finishPendingMapLoad(false);
+
+        const timer = this.scene.time.delayedCall(SCOREBOARD_DURATION_MS, () => {
+            this.pendingMapLoad = undefined;
+            run();
         });
+
+        this.pendingMapLoad = { timer, run };
+    }
+
+    /** Cancel the pending map switch, optionally doing it right away. */
+    private finishPendingMapLoad(runNow: boolean) {
+        const pending = this.pendingMapLoad;
+        if (!pending) {
+            return;
+        }
+
+        this.pendingMapLoad = undefined;
+        this.scene.time.removeEvent(pending.timer);
+
+        if (runNow) {
+            pending.run();
+        }
+    }
+
+    private ensureMap(mapName: string) {
+        if (mapName !== this.currentMapName) {
+            this.loadMap(mapName);
+        }
+    }
+
+    private loadMap(mapName: string) {
+        this.currentMap.destroy();
+
+        const map = new TiledMapLoader().load(this.scene, mapName);
+
+        this.setCurrentMap(map);
+        this.currentMap = map;
+        this.currentMapName = mapName;
+
+        this.ballManager.setMap(map);
+        this.setupGoal();
     }
 
     private setupGoal() {
         this.currentMap.goal.setOnBallEntered((ballBody) => {
             this.ballManager.handleGoalReached(ballBody);
         });
+    }
+
+    /**
+     * Show the whole course in the space between the interface panels.
+     * Used in the lobby and while waiting to join.
+     */
+    frameCourse() {
+        const camera = this.scene.cameras.main;
+        const bounds = this.currentMap.bounds;
+
+        const availableWidth = camera.width - FRAME_MARGIN * 2;
+        const availableHeight =
+            camera.height - HUD_TOP - HUD_BOTTOM - FRAME_MARGIN;
+
+        const zoom = Phaser.Math.Clamp(
+            Math.min(
+                availableWidth / bounds.width,
+                availableHeight / bounds.height,
+            ),
+            0.3,
+            1,
+        );
+
+        // Centre the course in the free area, not the whole screen
+        const freeCenterY = HUD_TOP + availableHeight / 2 + FRAME_MARGIN / 2;
+        const offsetY = (freeCenterY - camera.height / 2) / zoom;
+
+        camera.stopFollow();
+        camera.setZoom(zoom);
+        camera.centerOn(bounds.centerX, bounds.centerY - offsetY);
+
+        this.framingCourse = true;
+    }
+
+    /** Back to the playing view: normal zoom, following your ball. */
+    private playCamera() {
+        if (this.framingCourse) {
+            this.scene.cameras.main.setZoom(PLAY_ZOOM);
+            this.framingCourse = false;
+        }
+
+        this.followOwnBall();
     }
 
     private followOwnBall() {

@@ -3,9 +3,26 @@ import { Goal } from "./Goal";
 import { GeneratedMap } from "./Type";
 import * as Phaser from "phaser";
 
-export class TiledMapLoader {
-    constructor(private readonly tileSize = 40) {}
+type TiledObject = Phaser.Types.Tilemaps.TiledObject;
 
+/** How many corners the collision shape of an ellipse wall gets. */
+const ELLIPSE_SEGMENTS = 24;
+
+/** Read the "color" property set on an object in Tiled, or the default wall color. */
+function getWallColor(object: TiledObject): number {
+    const colorProperty = (
+        object.properties as { name: string; value: unknown }[] | undefined
+    )?.find((property) => property.name === "color");
+
+    const color =
+        typeof colorProperty?.value === "string"
+            ? colorProperty.value
+            : "#555555";
+
+    return Phaser.Display.Color.HexStringToColor(color).color;
+}
+
+export class TiledMapLoader {
     load(scene: Phaser.Scene, key: string): GeneratedMap {
         const map = scene.make.tilemap({ key });
 
@@ -53,7 +70,10 @@ export class TiledMapLoader {
                     break;
 
                 case "Goal":
-                    goalPosition = new Phaser.Math.Vector2(object.x, object.y);
+                    goalPosition = new Phaser.Math.Vector2(
+                        object.x ?? 0,
+                        object.y ?? 0,
+                    );
                     break;
 
                 case "SpawnLine":
@@ -74,6 +94,13 @@ export class TiledMapLoader {
 
         return {
             goal,
+
+            bounds: new Phaser.Geom.Rectangle(
+                0,
+                0,
+                map.widthInPixels,
+                map.heightInPixels,
+            ),
 
             getBallSpawnPosition(playerIndex, playerCount) {
                 return spawnLine!.getPosition(playerIndex, playerCount);
@@ -97,7 +124,7 @@ export class TiledMapLoader {
 
     private createWall(
         scene: Phaser.Scene,
-        object: Phaser.Types.Tilemaps.TiledObject,
+        object: TiledObject,
         bodies: MatterJS.BodyType[],
         wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
@@ -124,79 +151,67 @@ export class TiledMapLoader {
 
     private createEllipseWall(
         scene: Phaser.Scene,
-        object: Phaser.Types.Tilemaps.TiledObject,
+        object: TiledObject,
         bodies: MatterJS.BodyType[],
         wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
-        const x = object.x + object.width! / 2;
-        const y = object.y + object.height! / 2;
+        const width = object.width ?? 0;
+        const height = object.height ?? 0;
 
-        // Get color from Tiled
-        const colorProperty = object.properties?.find(
-            (property) => property.name === "color",
-        );
-
-        const color = colorProperty?.value ?? "#555555";
+        const x = (object.x ?? 0) + width / 2;
+        const y = (object.y ?? 0) + height / 2;
 
         // Visual
         const graphics = scene.add.graphics();
 
-        graphics.fillStyle(
-            Phaser.Display.Color.HexStringToColor(color).color,
-            1,
-        );
-
-        graphics.fillEllipse(x, y, object.width!, object.height!);
+        graphics.fillStyle(getWallColor(object), 1);
+        graphics.fillEllipse(x, y, width, height);
 
         wallGraphics.push(graphics);
 
-        // Collision
-        const body = scene.matter.add.circle(
-            x,
-            y,
-            Math.max(object.width!, object.height!) / 2,
-            {
-                isStatic: true,
-            },
-        );
+        // Collision: a polygon that follows the ellipse, so the ball bounces
+        // where the wall is drawn (a circle only fits if width === height)
+        const vertices = Array.from({ length: ELLIPSE_SEGMENTS }, (_, i) => {
+            const angle = (i / ELLIPSE_SEGMENTS) * Math.PI * 2;
+
+            return {
+                x: (Math.cos(angle) * width) / 2,
+                y: (Math.sin(angle) * height) / 2,
+            };
+        });
+
+        const body = scene.matter.add.fromVertices(x, y, vertices, {
+            isStatic: true,
+        });
 
         bodies.push(body);
     }
 
     private createRectangleWall(
         scene: Phaser.Scene,
-        object: Phaser.Types.Tilemaps.TiledObject,
+        object: TiledObject,
         bodies: MatterJS.BodyType[],
         wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
-        const x = object.x + object.width! / 2;
-        const y = object.y + object.height! / 2;
-
-        // Get color from Tiled
-        const colorProperty = object.properties?.find(
-            (property) => property.name === "color",
-        );
-
-        const color = colorProperty?.value ?? "#555555";
+        const left = object.x ?? 0;
+        const top = object.y ?? 0;
+        const width = object.width ?? 0;
+        const height = object.height ?? 0;
 
         // Visual
         const graphics = scene.add.graphics();
 
-        graphics.fillStyle(
-            Phaser.Display.Color.HexStringToColor(color).color,
-            1,
-        );
-
-        graphics.fillRect(object.x, object.y, object.width!, object.height!);
+        graphics.fillStyle(getWallColor(object), 1);
+        graphics.fillRect(left, top, width, height);
 
         wallGraphics.push(graphics);
 
         // Collision
         const body = scene.matter.add.rectangle(
-            x,
-            y,
-            object.width!,
-            object.height!,
+            left + width / 2,
+            top + height / 2,
+            width,
+            height,
             {
                 isStatic: true,
             },
@@ -207,35 +222,28 @@ export class TiledMapLoader {
 
     private createPolygonWall(
         scene: Phaser.Scene,
-        object: Phaser.Types.Tilemaps.TiledObject,
+        object: TiledObject,
         bodies: MatterJS.BodyType[],
         wallGraphics: Phaser.GameObjects.Graphics[],
     ) {
+        const originX = object.x ?? 0;
+        const originY = object.y ?? 0;
+
         const points = object.polygon!.map((point) => ({
             x: point.x,
             y: point.y,
         }));
 
-        // Get color from Tiled
-        const colorProperty = object.properties?.find(
-            (property) => property.name === "color",
-        );
-
-        const color = colorProperty?.value ?? "#555555";
-
         // Visual
         const graphics = scene.add.graphics();
 
-        graphics.fillStyle(
-            Phaser.Display.Color.HexStringToColor(color).color,
-            1,
-        );
+        graphics.fillStyle(getWallColor(object), 1);
 
         graphics.beginPath();
-        graphics.moveTo(object.x + points[0].x, object.y + points[0].y);
+        graphics.moveTo(originX + points[0].x, originY + points[0].y);
 
         for (let i = 1; i < points.length; i++) {
-            graphics.lineTo(object.x + points[i].x, object.y + points[i].y);
+            graphics.lineTo(originX + points[i].x, originY + points[i].y);
         }
 
         graphics.closePath();
@@ -251,8 +259,8 @@ export class TiledMapLoader {
             y: point.y - centroid.y,
         }));
 
-        const worldX = object.x + centroid.x;
-        const worldY = object.y + centroid.y;
+        const worldX = originX + centroid.x;
+        const worldY = originY + centroid.y;
 
         const body = scene.matter.add.fromVertices(
             worldX,
@@ -297,9 +305,7 @@ export class TiledMapLoader {
         };
     }
 
-    private createSpawnLine(
-        object: Phaser.Types.Tilemaps.TiledObject,
-    ): SpawnLine {
+    private createSpawnLine(object: TiledObject): SpawnLine {
         if (!object.polyline || object.polyline.length < 2) {
             throw new Error("SpawnLine must contain at least two points");
         }
@@ -308,13 +314,13 @@ export class TiledMapLoader {
         const endPoint = object.polyline[object.polyline.length - 1];
 
         const start = new Phaser.Math.Vector2(
-            object.x + startPoint.x,
-            object.y + startPoint.y,
+            (object.x ?? 0) + startPoint.x,
+            (object.y ?? 0) + startPoint.y,
         );
 
         const end = new Phaser.Math.Vector2(
-            object.x + endPoint.x,
-            object.y + endPoint.y,
+            (object.x ?? 0) + endPoint.x,
+            (object.y ?? 0) + endPoint.y,
         );
 
         return new SpawnLine(start, end);

@@ -1,4 +1,5 @@
 import { Scene } from 'phaser';
+import { COLORS } from '../ui/theme';
 
 export class Preloader extends Scene
 {
@@ -9,39 +10,38 @@ export class Preloader extends Scene
 
     init ()
     {
-        //  We loaded this image in our Boot Scene, so we can display it here
-        this.add.image(512, 384, 'background');
+        const centerX = this.scale.width / 2;
+        const centerY = this.scale.height / 2;
 
-        //  A simple progress bar. This is the outline of the bar.
-        this.add.rectangle(512, 384, 468, 32).setStrokeStyle(1, 0xffffff);
+        //  Starfield behind the loading bar, like the rest of the game
+        this.add.tileSprite(centerX, centerY, this.scale.width, this.scale.height, 'space');
 
-        //  This is the progress bar itself. It will increase in size from the left based on the % of progress.
-        const bar = this.add.rectangle(512-230, 384, 4, 28, 0xffffff);
+        //  A thin fairway-green bar on a dark track
+        const trackWidth = 320;
 
-        //  Use the 'progress' event emitted by the LoaderPlugin to update the loading bar
+        this.add.rectangle(centerX, centerY, trackWidth, 6, COLORS.panel).setAlpha(0.9);
+
+        const bar = this.add.rectangle(centerX - trackWidth / 2, centerY, 0, 6, COLORS.fairway).setOrigin(0, 0.5);
+
         this.load.on('progress', (progress: number) => {
-
-            //  Update the progress bar (our bar is 464px wide, so 100% = 464px)
-            bar.width = 4 + (460 * progress);
-
+            bar.width = trackWidth * progress;
         });
     }
 
     preload ()
     {
-        //  Load the assets for the game - Replace with your own assets
         this.load.setPath('assets');
 
         this.load.image('logo', 'logo.png');
         this.load.image('star', 'star.png');
+
+        //  The interface typeface (TeX Gyre Adventor, GUST Font License)
+        this.load.font('Adventor', 'fonts/texgyreadventor-regular.otf', 'opentype');
+        this.load.font('Adventor Bold', 'fonts/texgyreadventor-bold.otf', 'opentype');
     }
 
     create ()
     {
-        //  When all the assets have loaded, it's often worth creating global objects here that the rest of the game can use.
-        //  For example, you can define global animations here, so we can use them in other scenes.
-
-        //  Move to the MainMenu. You could also swap this for a Scene Transition, such as a camera fade.
         this.scene.start('MainMenu');
     }
 }

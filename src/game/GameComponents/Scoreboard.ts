@@ -1,207 +1,265 @@
 import * as Phaser from "phaser";
 import { Player } from "../../../server/types/types";
+import {
+    COLORS,
+    CSS,
+    TYPE,
+    addText,
+    drawPanel,
+    drawPennant,
+} from "../ui/theme";
 
+const PADDING = 32;
+const ROW_HEIGHT = 44;
+const RANK_WIDTH = 36;
+const NAME_WIDTH = 220;
+const HOLE_WIDTH = 46;
+const TOTAL_WIDTH = 70;
+/** Older holes scroll off so the card always fits the screen. */
+const MAX_HOLE_COLUMNS = 12;
+
+/** Total shots, skipping holes the player didn't play. */
+function getTotal(player: Player) {
+    return (player.state?.points ?? []).reduce<number>(
+        (sum, score) => sum + (score ?? 0),
+        0,
+    );
+}
+
+function getHolesPlayed(player: Player) {
+    return (player.state?.points ?? []).filter((score) => score !== null)
+        .length;
+}
+
+/**
+ * Standings between holes: a card over the dimmed course with every
+ * player's shots per hole, and a countdown to the next hole.
+ */
 export class Scoreboard {
     private readonly container: Phaser.GameObjects.Container;
+    private countdown?: Phaser.Time.TimerEvent;
 
     constructor(private readonly scene: Phaser.Scene) {
-        this.container = scene.add
-            .container(640, 384)
-            .setDepth(3000)
-            .setScrollFactor(0);
-
+        this.container = scene.add.container(0, 0).setDepth(10);
         this.container.setVisible(false);
     }
 
-    show(players: Player[]) {
+    show(players: Player[], ownId: string, durationMs: number) {
         this.container.removeAll(true);
-        this.container.setVisible(true);
+        this.countdown?.remove();
 
-        const sortedPlayers = [...players].sort((a, b) => {
-            const scoreA =
-                a.state?.points.reduce((sum, points) => sum + points, 0) ?? 0;
+        const { width: screenWidth, height: screenHeight } = this.scene.scale;
 
-            const scoreB =
-                b.state?.points.reduce((sum, points) => sum + points, 0) ?? 0;
-
-            return scoreA - scoreB;
-        });
-
-        const rowHeight = 45;
-        const headerHeight = 45;
-
-        const titleY = -210;
-        const headerY = -150;
-        const startY = -105;
-
-        const roundCount = Math.max(
-            ...sortedPlayers.map((player) => player.state?.points.length ?? 0),
-            0,
+        // Players who played every hole rank first, then by fewest shots
+        const sorted = [...players].sort(
+            (a, b) =>
+                getHolesPlayed(b) - getHolesPlayed(a) ||
+                getTotal(a) - getTotal(b),
         );
 
-        const nameWidth = 250;
-        const roundWidth = 60;
-        const totalColumnWidth = 80;
+        const holeCount = Math.max(
+            0,
+            ...sorted.map((player) => player.state?.points.length ?? 0),
+        );
+        const firstHole = Math.max(0, holeCount - MAX_HOLE_COLUMNS);
+        const holes = Array.from(
+            { length: holeCount - firstHole },
+            (_, i) => firstHole + i,
+        );
 
-        const horizontalPadding = 50;
+        const cardWidth =
+            PADDING * 2 +
+            RANK_WIDTH +
+            NAME_WIDTH +
+            holes.length * HOLE_WIDTH +
+            TOTAL_WIDTH;
+        const cardHeight =
+            PADDING * 2 + 44 + 30 + 34 + sorted.length * ROW_HEIGHT;
 
-        // Calculate total width from the number of columns.
-        const totalWidth =
-            nameWidth +
-            roundCount * roundWidth +
-            totalColumnWidth +
-            horizontalPadding;
+        const left = Math.round((screenWidth - cardWidth) / 2);
+        const top = Math.round((screenHeight - cardHeight) / 2);
 
-        /*
-         * Title
-         */
-        const title = this.scene.add
-            .text(0, titleY, "Standings", {
-                fontFamily: "Arial Black",
-                fontSize: "36px",
-                color: "#ffffff",
-            })
-            .setOrigin(0.5);
+        // Dim the course behind the card
+        const backdrop = this.scene.add.graphics();
+        backdrop.fillStyle(0x060a18, 0.6);
+        backdrop.fillRect(0, 0, screenWidth, screenHeight);
 
-        this.container.add(title);
+        const card = this.scene.add.graphics();
+        drawPanel(card, left, top, cardWidth, cardHeight, 20, 0.98);
 
-        /*
-         * Header background
-         */
-        const headerBackground = this.scene.add
-            .rectangle(0, headerY, totalWidth - 20, headerHeight, 0x333333, 1)
-            .setOrigin(0.5);
+        this.container.add([backdrop, card]);
 
-        this.container.add(headerBackground);
+        let y = top + PADDING;
 
-        /*
-         * Header text
-         */
-        const headerPlayer = this.scene.add
-            .text(-totalWidth / 2 + 25, headerY, "Player", {
-                fontFamily: "Arial",
-                fontSize: "20px",
-                fontStyle: "bold",
-                color: "#ffffff",
-            })
-            .setOrigin(0, 0.5);
+        const title = addText(
+            this.scene,
+            left + PADDING,
+            y,
+            `Hole ${holeCount} complete`,
+            { size: TYPE.title, bold: true },
+        );
 
-        this.container.add(headerPlayer);
+        const countdownText = addText(
+            this.scene,
+            left + cardWidth - PADDING,
+            y + 10,
+            "",
+            { size: TYPE.body, color: CSS.muted },
+        ).setOrigin(1, 0);
 
-        for (let round = 0; round < roundCount; round++) {
-            const x = -totalWidth / 2 + nameWidth + round * roundWidth;
+        this.container.add([title, countdownText]);
 
-            const text = this.scene.add
-                .text(x, headerY, `R${round + 1}`, {
-                    fontFamily: "Arial",
-                    fontSize: "20px",
-                    fontStyle: "bold",
-                    color: "#ffffff",
-                })
-                .setOrigin(0.5);
+        y += 44 + 30;
 
-            this.container.add(text);
-        }
+        // Column headings: hole numbers, then total
+        const holesLeft = left + PADDING + RANK_WIDTH + NAME_WIDTH;
+        const totalX = holesLeft + holes.length * HOLE_WIDTH + TOTAL_WIDTH;
 
-        const totalX =
-            -totalWidth / 2 +
-            nameWidth +
-            roundCount * roundWidth +
-            totalColumnWidth / 2;
-
-        const totalHeader = this.scene.add
-            .text(totalX, headerY, "Total", {
-                fontFamily: "Arial",
-                fontSize: "20px",
-                fontStyle: "bold",
-                color: "#ffffff",
-            })
-            .setOrigin(0.5);
-
-        this.container.add(totalHeader);
-
-        /*
-         * Player rows
-         */
-        sortedPlayers.forEach((player, index) => {
-            const y = startY + index * rowHeight;
-
-            /*
-             * Row background
-             */
-            const rowBackground = this.scene.add
-                .rectangle(
-                    0,
+        holes.forEach((hole, column) => {
+            this.container.add(
+                addText(
+                    this.scene,
+                    holesLeft + column * HOLE_WIDTH + HOLE_WIDTH / 2,
                     y,
-                    totalWidth - 20,
-                    rowHeight,
-                    index % 2 === 0 ? 0x222222 : 0x181818,
-                    1,
-                )
-                .setOrigin(0.5);
+                    `${hole + 1}`,
+                    { size: TYPE.small, color: CSS.muted },
+                ).setOrigin(0.5, 0),
+            );
+        });
 
-            this.container.add(rowBackground);
+        this.container.add(
+            addText(this.scene, totalX, y, "Total", {
+                size: TYPE.small,
+                color: CSS.muted,
+            }).setOrigin(1, 0),
+        );
+
+        y += 34;
+
+        // Rows
+        sorted.forEach((player, index) => {
+            const centerY = y + ROW_HEIGHT / 2;
+            const isOwn = player.id === ownId;
+            const isLeader = index === 0 && getHolesPlayed(player) > 0;
+
+            if (isOwn) {
+                card.fillStyle(COLORS.panelHighlight, 1);
+                card.fillRoundedRect(
+                    left + PADDING / 2,
+                    y + 2,
+                    cardWidth - PADDING,
+                    ROW_HEIGHT - 4,
+                    10,
+                );
+            }
+
+            // The leader holds the flag
+            if (isLeader) {
+                drawPennant(
+                    card,
+                    left + PADDING + 6,
+                    centerY + 10,
+                    20,
+                    COLORS.fairway,
+                    COLORS.text,
+                );
+            } else {
+                this.container.add(
+                    addText(
+                        this.scene,
+                        left + PADDING + 4,
+                        centerY,
+                        `${index + 1}`,
+                        { size: TYPE.body, color: CSS.muted },
+                    ).setOrigin(0, 0.5),
+                );
+            }
+
+            const dot = this.scene.add.graphics();
+            dot.fillStyle(player.color ?? 0xffffff, 1);
+            dot.fillCircle(left + PADDING + RANK_WIDTH + 7, centerY, 7);
+
+            const name = addText(
+                this.scene,
+                left + PADDING + RANK_WIDTH + 24,
+                centerY,
+                isOwn ? `${player.name} (you)` : player.name,
+                { size: TYPE.body, bold: isOwn },
+            ).setOrigin(0, 0.5);
+
+            const maxNameWidth = NAME_WIDTH - 32;
+            if (name.width > maxNameWidth) {
+                name.setCrop(0, 0, maxNameWidth, name.height);
+            }
+
+            this.container.add([dot, name]);
 
             const points = player.state?.points ?? [];
 
-            const total = points.reduce((sum, score) => sum + score, 0);
+            holes.forEach((hole, column) => {
+                const score = points[hole];
 
-            /*
-             * Player name
-             */
-            const name = this.scene.add
-                .text(-totalWidth / 2 + 25, y, player.name, {
-                    fontFamily: "Arial",
-                    fontSize: "20px",
-                    color: "#ffffff",
-                })
-                .setOrigin(0, 0.5);
-
-            this.container.add(name);
-
-            /*
-             * Round scores
-             */
-            for (let round = 0; round < roundCount; round++) {
-                const score = points[round] ?? "-";
-
-                const scoreText = this.scene.add
-                    .text(
-                        -totalWidth / 2 + nameWidth + round * roundWidth,
-                        y,
-                        `${score}`,
+                this.container.add(
+                    addText(
+                        this.scene,
+                        holesLeft + column * HOLE_WIDTH + HOLE_WIDTH / 2,
+                        centerY,
+                        score === null || score === undefined ? "–" : `${score}`,
                         {
-                            fontFamily: "Arial",
-                            fontSize: "20px",
-                            color: "#ffffff",
+                            size: TYPE.body,
+                            color:
+                                score === null || score === undefined
+                                    ? CSS.muted
+                                    : CSS.text,
                         },
-                    )
-                    .setOrigin(0.5);
+                    ).setOrigin(0.5),
+                );
+            });
 
-                this.container.add(scoreText);
-            }
+            this.container.add(
+                addText(this.scene, totalX, centerY, `${getTotal(player)}`, {
+                    size: TYPE.label,
+                    bold: true,
+                    color: isLeader ? CSS.fairway : CSS.text,
+                }).setOrigin(1, 0.5),
+            );
 
-            /*
-             * Total score
-             */
-            const totalText = this.scene.add
-                .text(totalX, y, `${total}`, {
-                    fontFamily: "Arial",
-                    fontSize: "20px",
-                    fontStyle: "bold",
-                    color: "#ffffff",
-                })
-                .setOrigin(0.5);
+            y += ROW_HEIGHT;
+        });
 
-            this.container.add(totalText);
+        // Countdown to the next hole
+        let secondsLeft = Math.round(durationMs / 1000);
+        countdownText.setText(`Next hole in ${secondsLeft}`);
+
+        this.countdown = this.scene.time.addEvent({
+            delay: 1000,
+            repeat: secondsLeft - 1,
+            callback: () => {
+                secondsLeft -= 1;
+                countdownText.setText(
+                    secondsLeft > 0 ? `Next hole in ${secondsLeft}` : "Teeing off",
+                );
+            },
+        });
+
+        // One entrance: the card settles in
+        this.container.setVisible(true).setAlpha(0);
+        this.scene.tweens.add({
+            targets: this.container,
+            alpha: 1,
+            duration: 250,
+            ease: "Quad.easeOut",
         });
     }
 
     hide() {
+        this.countdown?.remove();
+        this.countdown = undefined;
         this.container.setVisible(false);
     }
 
     destroy() {
+        this.hide();
         this.container.destroy();
     }
 }

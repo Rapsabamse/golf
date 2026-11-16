@@ -4,6 +4,9 @@ import {
     GameState,
     MessageTypeClient,
     ServerMessageData,
+    ServerData,
+    BallLocation,
+    Vector,
 } from "../../../server/types/types";
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8090";
@@ -13,12 +16,12 @@ export class Network {
     private playerId!: string;
     private players: Player[] = [];
     private gameState: GameState;
-    private isHost: boolean;
+    private isHost = false;
+    private hostId?: string;
 
     onPlayerList?: (players: Player[], self: Player | undefined) => void;
-    onGameStateChange?: (gamestate: GameState, data?: any) => void;
+    onGameStateChange?: (gamestate: GameState, data?: ServerData) => void;
     onReadyConfirmed?: () => void;
-    onConnection?: (gamestate: GameState, isHost: boolean) => void;
 
     connect(playerName: string) {
         this.socket = new WebSocket(WS_URL);
@@ -33,14 +36,20 @@ export class Network {
         };
 
         this.socket.onmessage = (event) => {
-            const message: ServerMessageData = JSON.parse(event.data);
+            let message: ServerMessageData;
+            try {
+                message = JSON.parse(event.data);
+            } catch {
+                console.warn("Ignoring invalid message from server");
+                return;
+            }
 
-            if (
-                (message.data?.hostId &&
-                    message.data.hostId === this.playerId) ||
-                message.data?.isHost
-            ) {
-                this.isHost = true;
+            // Host status can move to another player when the host leaves
+            if (message.data?.hostId !== undefined) {
+                this.hostId = message.data.hostId;
+                this.isHost = message.data.hostId === this.playerId;
+            } else if (typeof message.data?.isHost === "boolean") {
+                this.isHost = message.data.isHost;
             }
 
             if (
@@ -53,43 +62,32 @@ export class Network {
                 return;
             }
 
-            if (message.type === MessageTypeServer.CONNECTED) {
-                if (message.data.playerId) {
-                    this.playerId = message.data.playerId;
-
-                    if (message.data.state && message.data.isHost) {
-                        this.onConnection?.(
-                            message.data.state,
-                            message.data.isHost,
-                        );
-                    } else {
-                        console.error(
-                            "Recieved insufficient connection data from server",
-                        );
-                    }
-                }
+            if (
+                message.type === MessageTypeServer.CONNECTED &&
+                message.data.playerId
+            ) {
+                this.playerId = message.data.playerId;
             }
 
-            if (message.type === MessageTypeServer.PLAYER_LIST) {
-                if (message.data.playerList) {
-                    this.players = message.data.playerList;
+            if (
+                message.type === MessageTypeServer.PLAYER_LIST &&
+                message.data.playerList
+            ) {
+                this.players = message.data.playerList;
 
-                    let self = undefined;
-                    this.players.forEach((player) => {
-                        if (player.id === this.playerId) {
-                            self = player;
-                        }
-                    });
+                const self = this.players.find(
+                    (player) => player.id === this.playerId,
+                );
 
-                    this.onPlayerList?.(this.players, self);
-                }
+                this.onPlayerList?.(this.players, self);
             }
 
-            if (message.type === MessageTypeServer.GAME_STATE) {
-                if (message.data.state != undefined) {
-                    this.gameState = message.data.state;
-                    this.onGameStateChange?.(this.gameState, message.data);
-                }
+            if (
+                message.type === MessageTypeServer.GAME_STATE &&
+                message.data.state !== undefined
+            ) {
+                this.gameState = message.data.state;
+                this.onGameStateChange?.(this.gameState, message.data);
             }
         };
 
@@ -99,7 +97,9 @@ export class Network {
     }
 
     send(message: object) {
-        this.socket.send(JSON.stringify(message));
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify(message));
+        }
     }
 
     sendReady() {
@@ -108,10 +108,10 @@ export class Network {
         });
     }
 
-    sendShot(direction: Phaser.Math.Vector2) {
+    sendShot(direction: Vector) {
         this.send({
             type: MessageTypeClient.SHOT_SELECTED,
-            data: direction,
+            data: { x: direction.x, y: direction.y },
         });
     }
 
@@ -119,12 +119,12 @@ export class Network {
         this.send({ type: MessageTypeClient.LOADED_NEW_MAP });
     }
 
-    sendSimulationResult(balls: { playerId: string; x: number; y: number }[]) {
+    /**
+     * Every client reports where the balls stopped. Only the host's result is
+     * used, but the server keeps the others in case the host leaves mid-shot.
+     */
+    sendSimulationResult(balls: BallLocation[]) {
         this.send({ type: MessageTypeClient.SIMULATION_DONE, data: balls });
-    }
-
-    sendSimulationDone() {
-        this.send({ type: MessageTypeClient.SIMULATION_DONE });
     }
 
     sendGoalReached(playerId: string) {
@@ -139,16 +139,19 @@ export class Network {
         return this.players;
     }
 
-    isLobbyWaiting(): Boolean {
+    isLobbyWaiting(): boolean {
         return this.gameState === GameState.WAITING;
     }
 
-    isLobbyPlanning(): Boolean {
+    isLobbyPlanning(): boolean {
         return this.gameState === GameState.PLANNING;
     }
 
-    isLobbySimulating(): Boolean {
-        return this.gameState === GameState.SIMULATING;
+    isLobbySimulating(): boolean {
+        return (
+            this.gameState === GameState.SIMULATING ||
+            this.gameState === GameState.SIMULATING_HOST
+        );
     }
 
     getGameState(): GameState {
@@ -159,11 +162,13 @@ export class Network {
         return this.isHost;
     }
 
+    getHostId(): string | undefined {
+        return this.hostId;
+    }
+
     startGame() {
-        this.socket.send(
-            JSON.stringify({
-                type: MessageTypeClient.START_GAME,
-            }),
-        );
+        this.send({
+            type: MessageTypeClient.START_GAME,
+        });
     }
 }

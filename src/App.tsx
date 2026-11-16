@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { IRefPhaserGame, PhaserGame } from "./PhaserGame";
-import { Game } from "./game/scenes/Game";
 import { EventBus } from "./game/EventBus";
 
 function App() {
@@ -8,7 +7,7 @@ function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
 
     useEffect(() => {
-        const handleSceneReady = (scene: Phaser.Scene) => {};
+        const handleSceneReady = (_scene: Phaser.Scene) => {};
 
         EventBus.on("current-scene-ready", handleSceneReady);
 
@@ -28,7 +27,7 @@ function App() {
     // };
 
     // Event emitted from the PhaserGame component
-    const currentScene = (scene: Phaser.Scene) => {
+    const currentScene = (_scene: Phaser.Scene) => {
         //setCanMoveSprite(scene.scene.key !== "MainMenu");
     };
 

@@ -1,261 +1,207 @@
+import { RawData } from "ws";
 import {
     BallLocation,
     GameState,
+    MAX_SHOT_SPEED,
     MessageTypeClient,
     MessageTypeServer,
-    Player,
-    ServerData,
+    Vector,
 } from "../types/types";
-import { broadcast, broadcastSingle, getPlayersList } from "../serverHelpers";
-import { WebSocket } from "ws";
-import Phaser from "phaser";
+import { broadcastSingle } from "../serverHelpers";
+import { ServerContext, SimulationReport } from "../serverState";
+import {
+    applyGoal,
+    broadcastPlayerList,
+    finishMapLoad,
+    finishSimulation,
+    startGame,
+    tryStartSimulation,
+} from "../gameLogic";
+
+const MAX_NAME_LENGTH = 16;
 
 export function handleMessages(
     playerId: string,
-    data: WebSocket.RawData,
-    gameState: GameState,
-    players: Map<string, Player>,
-    setGamestate: (newGamestate: GameState) => void,
-    getHostId: () => string | undefined,
-    setBallLocations: (newBallLocations: BallLocation[]) => void,
-    getBallLocations: () => BallLocation[],
-    getScoringPlayers: () => string[],
-    playersReady: Set<string>,
+    data: RawData,
+    ctx: ServerContext,
 ) {
-    const message = JSON.parse(data.toString());
-
-    if (message.type === MessageTypeClient.NAME) {
-        const player = players.get(playerId);
-
-        console.log(playerId, " set their name to: ", message.data);
-
-        if (player) {
-            player.name = message.data;
-        }
+    // A broken message must never crash the server
+    let message: { type?: unknown; data?: unknown };
+    try {
+        message = JSON.parse(data.toString());
+    } catch {
+        console.warn(`Ignoring invalid message from ${playerId}`);
+        return;
     }
 
-    //A client tries to start the game
-    if (
-        message.type === MessageTypeClient.START_GAME &&
-        gameState === GameState.WAITING
-    ) {
-        console.log("Starting planning phase");
-
-        if (gameState !== GameState.WAITING) {
-            return;
-        }
-
-        setGamestate(GameState.PLANNING);
-
-        players.forEach((player) => {
-            player.roundState = {
-                shots: 0,
-                hasScored: false,
-            };
-            player.waitingForNextRound = false;
-        });
-
-        broadcast(
-            {
-                type: MessageTypeServer.GAME_STATE,
-                data: { state: GameState.PLANNING },
-            },
-            players,
-        );
+    if (!message || typeof message !== "object") {
+        return;
     }
 
-    //Client sends their last selected shot
-    if (
-        message.type === MessageTypeClient.SHOT_SELECTED &&
-        gameState === GameState.PLANNING
-    ) {
-        const data: Phaser.Math.Vector2 = message.data;
-
-        console.log(
-            `Player ${playerId} has selected a new shot - X: ${data.x} Y: ${data.y}`,
-        );
-
-        let currentPlayer = players.get(playerId);
-        if (currentPlayer) {
-            currentPlayer!.shot = { direction: data };
-            players.set(playerId, currentPlayer);
-        }
+    const player = ctx.players.get(playerId);
+    if (!player) {
+        return;
     }
 
-    //Client sets that they are ready
-    if (
-        message.type === MessageTypeClient.READY &&
-        gameState === GameState.PLANNING
-    ) {
-        playersReady.add(playerId);
+    const isHost = playerId === ctx.hostId;
+    const isPlaying =
+        !player.waitingForNextRound && !player.roundState?.hasScored;
 
-        //Tell player that server set them as ready
-        const player = players.get(playerId);
-        if (player) {
-            broadcastSingle(
-                {
-                    type: MessageTypeServer.SHOT_SELECTION_CONFIRMATION,
-                },
-                player,
-            );
-        }
-
-        const allPlayersReady = Array.from(players.values())
-            .filter(
-                (player) =>
-                    !player.waitingForNextRound &&
-                    !player.roundState?.hasScored,
-            )
-            .every((player) => playersReady.has(player.id));
-
-        if (!allPlayersReady) {
-            return;
-        }
-
-        playersReady.clear();
-
-        if (allPlayersReady) {
-            setGamestate(GameState.SIMULATING);
-
-            const playerList = Array.from(players.values()).map((player) => ({
-                id: player.id,
-                shot: player.shot,
-            }));
-
-            broadcast(
-                {
-                    type: MessageTypeServer.GAME_STATE,
-                    data: {
-                        state: getHostId()
-                            ? GameState.SIMULATING_HOST
-                            : GameState.SIMULATING,
-                        playerList: playerList,
-                    } as ServerData,
-                },
-                players,
-            );
-
-            console.log("Sending simulation data to clients");
-
-            // Increment shots for players who havent scored
-            // Reset the shots for all players
-            players.forEach((player) => {
-                if (player.roundState && !player.roundState.hasScored) {
-                    player.roundState!.shots += 1;
-                }
-                player.shot = undefined;
-            });
-        }
-    }
-
-    //Client says that they have completed the simulation of the last round
-    if (
-        message.type === MessageTypeClient.SIMULATION_DONE &&
-        gameState === GameState.SIMULATING
-    ) {
-        if (playerId === getHostId()) {
-            setBallLocations(message.data);
-
-            setGamestate(GameState.PLANNING);
-
-            console.log("broadcasting ball-locations");
-
-            for (const player of players.values()) {
-                broadcastSingle(
-                    {
-                        type: MessageTypeServer.GAME_STATE,
-                        data: {
-                            state: GameState.PLANNING,
-                            ballLocations: getBallLocations(),
-                            scoringPlayers: getScoringPlayers(),
-                            shouldWait: player.waitingForNextRound,
-                        },
-                    },
-                    player,
-                );
+    switch (message.type) {
+        case MessageTypeClient.NAME: {
+            if (typeof message.data !== "string") {
+                return;
             }
-        }
-    }
 
-    //Client says that a player has went into the hole
-    if (
-        message.type === MessageTypeClient.PLAYER_GOAL &&
-        gameState === GameState.SIMULATING
-    ) {
-        // Only listen to hosts simulated goals
-        if (playerId != getHostId()) {
-            return;
+            const name = message.data.trim().slice(0, MAX_NAME_LENGTH);
+            if (name) {
+                player.name = name;
+                console.log(playerId, " set their name to: ", name);
+                broadcastPlayerList(ctx);
+            }
+            break;
         }
 
-        const scoringPlayer = players.get(message.data);
-        if (scoringPlayer && scoringPlayer.roundState?.hasScored === false) {
-            scoringPlayer.roundState!.hasScored = true;
-            scoringPlayer.state!.points.push(scoringPlayer.roundState!.shots);
+        // The host starts the game from the lobby
+        case MessageTypeClient.START_GAME:
+            if (ctx.gameState === GameState.WAITING && isHost) {
+                startGame(ctx);
+            }
+            break;
+
+        // Client sends their last selected shot
+        case MessageTypeClient.SHOT_SELECTED: {
+            if (ctx.gameState !== GameState.PLANNING || !isPlaying) {
+                return;
+            }
+
+            const direction = parseShot(message.data);
+            if (!direction) {
+                return;
+            }
 
             console.log(
-                "Player ",
-                message.data,
-                " Scored! Shots needed:",
-                scoringPlayer.roundState.shots,
+                `Player ${playerId} has selected a new shot - X: ${direction.x} Y: ${direction.y}`,
             );
+
+            player.shot = { direction };
+            break;
         }
 
-        let roundComplete = true;
-        players.forEach((player) => {
-            if (!player.waitingForNextRound) {
-                if (roundComplete && !player.roundState?.hasScored) {
-                    roundComplete = false;
-                }
+        // Client locks in their shot
+        case MessageTypeClient.READY:
+            if (
+                ctx.gameState !== GameState.PLANNING ||
+                !isPlaying ||
+                !player.shot
+            ) {
+                return;
             }
-        });
 
-        //If all players have scored, start a new round
-        if (roundComplete) {
-            players.forEach((player) => {
-                player.roundState = {
-                    shots: 0,
-                    hasScored: false,
-                };
-                player.waitingForNextRound = false;
-            });
+            ctx.playersReady.add(playerId);
 
-            /**
-             * Send to clients that the round is complete.
-             */
-            broadcast(
-                {
-                    type: MessageTypeServer.GAME_STATE,
-                    data: {
-                        state: GameState.ROUND_COMPLETE,
-                        playerData: players,
-                        playerList: getPlayersList(players),
-                    },
-                },
-                players,
+            broadcastSingle(
+                { type: MessageTypeServer.SHOT_SELECTION_CONFIRMATION },
+                player,
             );
 
-            setGamestate(GameState.ROUND_COMPLETE);
+            // Let everyone see who has locked in
+            broadcastPlayerList(ctx);
+
+            tryStartSimulation(ctx);
+            break;
+
+        // Client finished simulating the round
+        case MessageTypeClient.SIMULATION_DONE: {
+            if (ctx.gameState !== GameState.SIMULATING) {
+                return;
+            }
+
+            const locations = parseLocations(message.data);
+            getReport(ctx, playerId).locations = locations;
+
+            if (isHost) {
+                finishSimulation(ctx, locations);
+            }
+            break;
         }
+
+        // Client saw a ball go into the hole during the simulation
+        case MessageTypeClient.PLAYER_GOAL:
+            if (
+                ctx.gameState !== GameState.SIMULATING ||
+                typeof message.data !== "string"
+            ) {
+                return;
+            }
+
+            getReport(ctx, playerId).goals.add(message.data);
+
+            // Only the host's simulation counts
+            if (isHost) {
+                applyGoal(ctx, message.data);
+            }
+            break;
+
+        // Client finished loading the next map
+        case MessageTypeClient.LOADED_NEW_MAP:
+            if (ctx.gameState !== GameState.ROUND_COMPLETE) {
+                return;
+            }
+
+            ctx.mapLoaded.add(playerId);
+
+            if (isHost) {
+                finishMapLoad(ctx);
+            }
+            break;
+    }
+}
+
+function getReport(ctx: ServerContext, playerId: string): SimulationReport {
+    let report = ctx.simulationReports.get(playerId);
+
+    if (!report) {
+        report = { goals: new Set() };
+        ctx.simulationReports.set(playerId, report);
     }
 
-    //Client says that they have joined the new map
+    return report;
+}
+
+/** Accept only a real {x, y} shot, capped at the strongest shot the client allows. */
+function parseShot(data: unknown): Vector | undefined {
+    if (!data || typeof data !== "object") {
+        return undefined;
+    }
+
+    const { x, y } = data as Record<string, unknown>;
+
     if (
-        message.type === MessageTypeClient.LOADED_NEW_MAP &&
-        gameState === GameState.ROUND_COMPLETE
+        typeof x !== "number" ||
+        typeof y !== "number" ||
+        !Number.isFinite(x) ||
+        !Number.isFinite(y)
     ) {
-        if (playerId === getHostId()) {
-            /**
-             * Send to clients that they can start planning their shots
-             */
-            broadcast(
-                {
-                    type: MessageTypeServer.GAME_STATE,
-                    data: { state: GameState.PLANNING },
-                },
-                players,
-            );
-
-            setGamestate(GameState.PLANNING);
-        }
+        return undefined;
     }
+
+    const length = Math.hypot(x, y);
+    const scale = length > MAX_SHOT_SPEED ? MAX_SHOT_SPEED / length : 1;
+
+    return { x: x * scale, y: y * scale };
+}
+
+function parseLocations(data: unknown): BallLocation[] {
+    if (!Array.isArray(data)) {
+        return [];
+    }
+
+    return data.filter(
+        (location): location is BallLocation =>
+            !!location &&
+            typeof location.playerId === "string" &&
+            Number.isFinite(location.x) &&
+            Number.isFinite(location.y),
+    );
 }
