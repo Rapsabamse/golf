@@ -118,6 +118,10 @@ export class Game extends Phaser.Scene {
             () => this.sounds.isMuted(),
         );
 
+        // The aim arrow reports its charge to the power bar
+        this.aimController.onChargeChange = (charge) =>
+            this.ui.setCharge(charge);
+
         //Create the scoreboard
         this.scoreboard = new Scoreboard(hud);
 

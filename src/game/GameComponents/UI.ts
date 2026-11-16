@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { GameState, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 import { PlayerPanel } from "./PlayerPanel";
+import { PowerBar } from "./PowerBar";
 import { Button } from "../ui/Button";
 import {
     COLORS,
@@ -49,6 +50,7 @@ export class GameUI {
     private controls!: Phaser.GameObjects.Container;
 
     private playerPanel!: PlayerPanel;
+    private powerBar!: PowerBar;
 
     /** True once the server has confirmed our locked-in shot this phase. */
     private isReady = false;
@@ -111,11 +113,14 @@ export class GameUI {
             size: TYPE.body,
         }).setOrigin(0.5);
         this.toast = this.scene.add
-            .container(width / 2, height - MARGIN - 108, [
+            .container(width / 2, height - MARGIN - 150, [
                 this.toastBackground,
                 this.toastText,
             ])
             .setAlpha(0);
+
+        // Shot power, above the main button
+        this.powerBar = new PowerBar(this.scene, width / 2, height - MARGIN - 100);
 
         this.createControls();
 
@@ -198,6 +203,11 @@ export class GameUI {
                 duration: 300,
             });
         });
+    }
+
+    /** Show the charge while aiming (0..1), or hide the bar with undefined. */
+    setCharge(charge: number | undefined) {
+        this.powerBar.setCharge(charge);
     }
 
     /** Run the main action (Enter key). */
