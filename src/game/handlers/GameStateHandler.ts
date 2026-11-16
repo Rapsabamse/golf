@@ -1,5 +1,10 @@
 import * as Phaser from "phaser";
-import { GameState, Player, ServerData } from "../../../server/types/types";
+import {
+    CourseState,
+    GameState,
+    Player,
+    ServerData,
+} from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
@@ -61,13 +66,19 @@ export class GameStateHandler {
             this.ui.setHole(data.hole);
         }
 
-        // Keeps late joiners on the same hole as everyone else
+        // Keeps late joiners on the same hole as everyone else (someone who
+        // joins during the scoreboard goes straight to the next hole's map)
         if (
             data?.mapName &&
             gamestate !== GameState.WAITING &&
-            gamestate !== GameState.ROUND_COMPLETE
+            (gamestate !== GameState.ROUND_COMPLETE || data.courseState)
         ) {
             this.ensureMap(data.mapName);
+        }
+
+        // Joined a game in progress: put everyone's ball where it is now
+        if (data?.courseState) {
+            this.showCourseState(data.courseState);
         }
 
         switch (gamestate) {
@@ -90,6 +101,19 @@ export class GameStateHandler {
         }
 
         this.ui.updateUI(gamestate, this.network.getIsHost(), data?.shouldWait);
+    }
+
+    private showCourseState(courseState: CourseState) {
+        // Same spawn order as everyone else used at the start of the hole
+        this.ballManager.updateBalls(courseState.players, true);
+
+        // Then move them to where they stopped after the last shot
+        this.ballManager.updateBallLocations(courseState.ballLocations);
+
+        this.setScoredPlayers(courseState.scoringPlayers);
+        this.ballManager.updateScoringPlayers();
+
+        this.frameCourse();
     }
 
     private handleWaiting(data?: ServerData) {

@@ -91,6 +91,18 @@ export interface ServerData {
     mapName?: string;
     /** Hole number (1-based) that goes with mapName. */
     hole?: number;
+    /** Sent to someone joining a game in progress, so they can watch it. */
+    courseState?: CourseState;
+}
+
+/** Where things stand on the course right now. */
+export interface CourseState {
+    /** Players taking part in this hole, in spawn order. */
+    players: Player[];
+    /** Where each ball stopped after the last shot (empty before the first shot). */
+    ballLocations: BallLocation[];
+    /** Players who have already holed out. */
+    scoringPlayers: string[];
 }
 
 export interface BallLocation {

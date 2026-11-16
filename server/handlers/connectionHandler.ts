@@ -2,9 +2,16 @@ import { ServerContext } from "../serverState";
 import {
     broadcastPlayerList,
     getCurrentMapName,
+    getScoringPlayers,
     pickColor,
 } from "../gameLogic";
-import { GameState, MessageTypeServer, Player } from "../types/types";
+import { getPlayersList } from "../serverHelpers";
+import {
+    CourseState,
+    GameState,
+    MessageTypeServer,
+    Player,
+} from "../types/types";
 import { WebSocket } from "ws";
 
 export function handleConnection(
@@ -40,6 +47,18 @@ export function handleConnection(
         }),
     );
 
+    // Joining a game in progress: send where everyone's ball is, so the
+    // new player can watch until the next hole
+    const courseState: CourseState | undefined = shouldWait
+        ? {
+              players: getPlayersList(ctx.players).filter(
+                  (other) => !other.waitingForNextRound,
+              ),
+              ballLocations: ctx.ballLocations,
+              scoringPlayers: getScoringPlayers(ctx),
+          }
+        : undefined;
+
     // Send the current game state and map to the client
     socket.send(
         JSON.stringify({
@@ -50,6 +69,7 @@ export function handleConnection(
                 shouldWait,
                 mapName: getCurrentMapName(ctx),
                 hole: ctx.holeIndex + 1,
+                courseState,
             },
         }),
     );
