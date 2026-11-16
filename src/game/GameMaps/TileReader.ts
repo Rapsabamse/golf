@@ -2,6 +2,18 @@ import { SpawnLine } from "../GameHelpers/SpawnLine";
 import { Goal } from "./Goal";
 import { GeneratedMap } from "./Type";
 import * as Phaser from "phaser";
+import {
+    TURF_TEXTURE,
+    drawCourseSurface,
+    drawTee,
+    drawWall,
+    ensureTurfTexture,
+    findSharedEdges,
+    flashBumper,
+    getMaterial,
+} from "./CourseArt";
+
+type Point = { x: number; y: number };
 
 type TiledObject = Phaser.Types.Tilemaps.TiledObject;
 
@@ -22,6 +34,15 @@ function getWallColor(object: TiledObject): number {
     return Phaser.Display.Color.HexStringToColor(color).color;
 }
 
+/** Read a text property set on an object in Tiled. */
+function getStringProperty(object: TiledObject, name: string) {
+    const property = (
+        object.properties as { name: string; value: unknown }[] | undefined
+    )?.find((candidate) => candidate.name === name);
+
+    return typeof property?.value === "string" ? property.value : undefined;
+}
+
 /** Read a true/false property set on an object in Tiled. */
 function getBooleanProperty(
     object: TiledObject,
@@ -40,24 +61,14 @@ export class TiledMapLoader {
 
         const bodies: MatterJS.BodyType[] = [];
         const wallGraphics: Phaser.GameObjects.Graphics[] = [];
+        const bumperFlashes = new Map<MatterJS.BodyType, Phaser.GameObjects.Graphics>();
+        // Walls built from pieces (a "group" property in Tiled), drawn as one
+        const groups = new Map<string, { points: Point[]; object: TiledObject }[]>();
 
-        // Add the background. It doesn't scroll, but it is scaled by the
-        // camera zoom, so it is made big enough to cover the screen when
-        // zoomed all the way out.
-        const background = scene.add
-            .tileSprite(0, 0, 1, 1, "space")
-            .setScrollFactor(0)
-            .setDepth(-100);
-
-        const resizeBackground = (width: number, height: number) => {
-            background
-                .setPosition(width / 2, height / 2)
-                .setSize(width * 4, height * 4);
-        };
-
-        resizeBackground(scene.scale.width, scene.scale.height);
-
-        const grassTileset = map.addTilesetImage("Grass", "grass");
+        // The maps use the Grass tileset; it is drawn with the generated
+        // putting-green turf, which has the same layout
+        ensureTurfTexture(scene);
+        const grassTileset = map.addTilesetImage("Grass", TURF_TEXTURE);
 
         if (!grassTileset) {
             throw new Error("Failed to load Grass tileset");
@@ -68,6 +79,14 @@ export class TiledMapLoader {
         if (!groundLayer) {
             throw new Error("Failed to create Ground layer");
         }
+
+        // Mown stripes, and the course's shadow on the stars
+        const surface = drawCourseSurface(
+            scene,
+            (col, row) => !!map.getTileAt(col, row, false, "Ground"),
+            map.width,
+            map.height,
+        );
 
         // Create objects
         const objectsLayer = map.getObjectLayer("Objects");
@@ -85,7 +104,14 @@ export class TiledMapLoader {
                     const drawnBefore = wallGraphics.length;
                     const bodiesBefore = bodies.length;
 
-                    this.createWall(scene, object, bodies, wallGraphics);
+                    this.createWall(
+                        scene,
+                        object,
+                        bodies,
+                        wallGraphics,
+                        bumperFlashes,
+                        groups,
+                    );
 
                     // Hidden walls (visible unticked in Tiled) still block
                     // balls. Maps put a thick hidden wall under each thin
@@ -120,6 +146,22 @@ export class TiledMapLoader {
             }
         }
 
+        // Draw grouped walls now that all their pieces are known
+        for (const pieces of groups.values()) {
+            const isShared = findSharedEdges(pieces.map((piece) => piece.points));
+
+            for (const { points, object } of pieces) {
+                const art = drawWall(
+                    scene,
+                    points,
+                    getWallColor(object),
+                    getMaterial(object.properties),
+                    isShared,
+                );
+                wallGraphics.push(art.shadow, art.body);
+            }
+        }
+
         if (!goalPosition) {
             throw new Error("Map does not contain a Goal");
         }
@@ -129,11 +171,17 @@ export class TiledMapLoader {
         }
 
         const goal = new Goal(scene, goalPosition);
+        const tee = drawTee(scene, spawnLine.start, spawnLine.end);
 
         return {
             goal,
 
-            resizeBackground,
+            onWallHit(body) {
+                const flash = bumperFlashes.get(body);
+                if (flash) {
+                    flashBumper(scene, flash);
+                }
+            },
 
             bounds: new Phaser.Geom.Rectangle(
                 0,
@@ -156,7 +204,11 @@ export class TiledMapLoader {
                 }
 
                 groundLayer.destroy();
-                background.destroy();
+                tee.destroy();
+
+                for (const graphics of surface) {
+                    graphics.destroy();
+                }
                 goal.destroy();
             },
         };
@@ -167,50 +219,64 @@ export class TiledMapLoader {
         object: TiledObject,
         bodies: MatterJS.BodyType[],
         wallGraphics: Phaser.GameObjects.Graphics[],
+        bumperFlashes: Map<MatterJS.BodyType, Phaser.GameObjects.Graphics>,
+        groups: Map<string, { points: Point[]; object: TiledObject }[]>,
     ) {
-        // Polygon wall
+        let shape: { points: Point[]; body: MatterJS.BodyType } | undefined;
+
         if (object.polygon && object.polygon.length >= 3) {
-            this.createPolygonWall(scene, object, bodies, wallGraphics);
+            shape = this.createPolygonWall(scene, object);
+        } else if (object.ellipse) {
+            shape = this.createEllipseWall(scene, object);
+        } else if (object.width !== undefined && object.height !== undefined) {
+            shape = this.createRectangleWall(scene, object);
+        }
+
+        if (!shape) {
+            console.warn(`Wall "${object.name}" has invalid geometry`);
             return;
         }
 
-        // Ellipse wall
-        if (object.ellipse) {
-            this.createEllipseWall(scene, object, bodies, wallGraphics);
+        bodies.push(shape.body);
+
+        // Hidden walls only need their body
+        if (object.visible === false) {
             return;
         }
 
-        // Rectangle wall
-        if (object.width !== undefined && object.height !== undefined) {
-            this.createRectangleWall(scene, object, bodies, wallGraphics);
+        // Pieces of a longer wall are drawn together once all are loaded
+        const group = getStringProperty(object, "group");
+        if (group) {
+            const pieces = groups.get(group) ?? [];
+            pieces.push({ points: shape.points, object });
+            groups.set(group, pieces);
             return;
         }
 
-        console.warn(`Wall "${object.name}" has invalid geometry`);
+        const art = drawWall(
+            scene,
+            shape.points,
+            getWallColor(object),
+            getMaterial(object.properties),
+        );
+
+        wallGraphics.push(art.shadow, art.body);
+
+        if (art.flash) {
+            wallGraphics.push(art.flash);
+            bumperFlashes.set(shape.body, art.flash);
+        }
     }
 
-    private createEllipseWall(
-        scene: Phaser.Scene,
-        object: TiledObject,
-        bodies: MatterJS.BodyType[],
-        wallGraphics: Phaser.GameObjects.Graphics[],
-    ) {
+    private createEllipseWall(scene: Phaser.Scene, object: TiledObject) {
         const width = object.width ?? 0;
         const height = object.height ?? 0;
 
         const x = (object.x ?? 0) + width / 2;
         const y = (object.y ?? 0) + height / 2;
 
-        // Visual
-        const graphics = scene.add.graphics();
-
-        graphics.fillStyle(getWallColor(object), 1);
-        graphics.fillEllipse(x, y, width, height);
-
-        wallGraphics.push(graphics);
-
-        // Collision: a polygon that follows the ellipse, so the ball bounces
-        // where the wall is drawn (a circle only fits if width === height)
+        // A polygon that follows the ellipse, so the ball bounces where the
+        // wall is drawn (a circle only fits if width === height)
         const vertices = Array.from({ length: ELLIPSE_SEGMENTS }, (_, i) => {
             const angle = (i / ELLIPSE_SEGMENTS) * Math.PI * 2;
 
@@ -224,29 +290,24 @@ export class TiledMapLoader {
             isStatic: true,
         });
 
-        bodies.push(body);
+        // Drawn smoother than the collision shape
+        const outline = Array.from({ length: 48 }, (_, i) => {
+            const angle = (i / 48) * Math.PI * 2;
+            return {
+                x: x + (Math.cos(angle) * width) / 2,
+                y: y + (Math.sin(angle) * height) / 2,
+            };
+        });
+
+        return { points: outline, body };
     }
 
-    private createRectangleWall(
-        scene: Phaser.Scene,
-        object: TiledObject,
-        bodies: MatterJS.BodyType[],
-        wallGraphics: Phaser.GameObjects.Graphics[],
-    ) {
+    private createRectangleWall(scene: Phaser.Scene, object: TiledObject) {
         const left = object.x ?? 0;
         const top = object.y ?? 0;
         const width = object.width ?? 0;
         const height = object.height ?? 0;
 
-        // Visual
-        const graphics = scene.add.graphics();
-
-        graphics.fillStyle(getWallColor(object), 1);
-        graphics.fillRect(left, top, width, height);
-
-        wallGraphics.push(graphics);
-
-        // Collision
         const body = scene.matter.add.rectangle(
             left + width / 2,
             top + height / 2,
@@ -257,15 +318,17 @@ export class TiledMapLoader {
             },
         );
 
-        bodies.push(body);
+        const points = [
+            { x: left, y: top },
+            { x: left + width, y: top },
+            { x: left + width, y: top + height },
+            { x: left, y: top + height },
+        ];
+
+        return { points, body };
     }
 
-    private createPolygonWall(
-        scene: Phaser.Scene,
-        object: TiledObject,
-        bodies: MatterJS.BodyType[],
-        wallGraphics: Phaser.GameObjects.Graphics[],
-    ) {
+    private createPolygonWall(scene: Phaser.Scene, object: TiledObject) {
         const originX = object.x ?? 0;
         const originY = object.y ?? 0;
 
@@ -274,24 +337,6 @@ export class TiledMapLoader {
             y: point.y,
         }));
 
-        // Visual
-        const graphics = scene.add.graphics();
-
-        graphics.fillStyle(getWallColor(object), 1);
-
-        graphics.beginPath();
-        graphics.moveTo(originX + points[0].x, originY + points[0].y);
-
-        for (let i = 1; i < points.length; i++) {
-            graphics.lineTo(originX + points[i].x, originY + points[i].y);
-        }
-
-        graphics.closePath();
-        graphics.fillPath();
-
-        wallGraphics.push(graphics);
-
-        // Collision
         const centroid = this.getPolygonCentroid(points);
 
         const localPoints = points.map((point) => ({
@@ -299,19 +344,22 @@ export class TiledMapLoader {
             y: point.y - centroid.y,
         }));
 
-        const worldX = originX + centroid.x;
-        const worldY = originY + centroid.y;
-
         const body = scene.matter.add.fromVertices(
-            worldX,
-            worldY,
+            originX + centroid.x,
+            originY + centroid.y,
             localPoints,
             {
                 isStatic: true,
             },
         );
 
-        bodies.push(body);
+        return {
+            points: points.map((point) => ({
+                x: originX + point.x,
+                y: originY + point.y,
+            })),
+            body,
+        };
     }
 
     private getPolygonCentroid(points: { x: number; y: number }[]): {

@@ -1128,7 +1128,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -1152,7 +1157,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -1171,7 +1181,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -1195,7 +1210,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -1214,7 +1234,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -1238,7 +1263,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -1257,7 +1287,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -1281,7 +1316,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -1314,7 +1354,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -1347,7 +1392,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -1380,7 +1430,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#149BC4"
+       "value": "#2FA3CF"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bank"
       }
      ]
     },
@@ -1413,7 +1468,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#149BC4"
+       "value": "#2FA3CF"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bank"
       }
      ]
     },
@@ -1433,7 +1493,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1453,7 +1518,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1473,7 +1543,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1493,7 +1568,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1513,7 +1593,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1533,7 +1618,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1553,7 +1643,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1573,7 +1668,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1593,7 +1693,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1613,7 +1718,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1633,7 +1743,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1653,7 +1768,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1673,7 +1793,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -1710,7 +1835,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#149BC4"
+       "value": "#2FA3CF"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bank"
       }
      ]
     },
@@ -1747,7 +1877,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#149BC4"
+       "value": "#2FA3CF"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bank"
       }
      ]
     },

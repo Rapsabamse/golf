@@ -1,11 +1,12 @@
 import * as Phaser from "phaser";
+import { drawCup } from "./CourseArt";
 
 const GOAL_BRAKE_FACTOR = 0.2;
 const GOAL_SPEED_THRESHOLD = 3;
 
 export class Goal {
     private readonly body: MatterJS.BodyType;
-    private readonly visual: Phaser.GameObjects.Arc;
+    private readonly visual: { destroy(): void };
 
     private onBallEntered?: (ballBody: MatterJS.BodyType) => void;
 
@@ -13,10 +14,8 @@ export class Goal {
         private readonly scene: Phaser.Scene,
         readonly position: Phaser.Math.Vector2,
     ) {
-        // Visual
-        this.visual = scene.add
-            .circle(position.x, position.y, 15, 0x000000)
-            .setDepth(1);
+        // Visual: the cup and its flag
+        this.visual = drawCup(scene, position.x, position.y);
 
         // Physics sensor
         this.body = scene.matter.add.circle(position.x, position.y, 15, {

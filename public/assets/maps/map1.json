@@ -676,7 +676,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -700,7 +705,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -719,7 +729,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -743,7 +758,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -762,7 +782,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -786,7 +811,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -805,7 +835,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -829,7 +864,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -862,7 +902,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -895,7 +940,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -928,7 +978,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -961,7 +1016,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -981,7 +1041,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },

@@ -352,8 +352,6 @@ export class GameStateHandler {
     onViewResize(ratio: number) {
         const camera = this.scene.cameras.main;
 
-        this.currentMap.resizeBackground(camera.width, camera.height);
-
         if (this.framingCourse) {
             this.frameCourse();
         } else {

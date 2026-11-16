@@ -355,6 +355,13 @@ export class BallManager {
 
             if (speed >= MIN_BOUNCE_SPEED) {
                 this.sounds.bounce(speed / LOUD_BOUNCE_SPEED);
+
+                // Let the wall react (bumpers light up)
+                for (const body of [pair.bodyA, pair.bodyB]) {
+                    if (body.isStatic) {
+                        this.gameMap.onWallHit(body);
+                    }
+                }
             }
         }
     };

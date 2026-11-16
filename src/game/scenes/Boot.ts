@@ -10,12 +10,9 @@ export class Boot extends Scene {
         //  The Boot Scene is typically used to load in any assets you require for your Preloader, such as a game logo or background.
         //  The smaller the file size of the assets, the better, as the Boot Scene itself has no preloader.
 
-        this.load.image("space", "assets/space.png");
-        this.load.image("background", "assets/background.png");
-        this.load.image("worldBackground", "assets/worldBackground.jpg");
-        this.load.image("goal", "assets/goal.png");
+        //  The sky, grass, walls and cup are all drawn in code
+        //  (scenes/Backdrop.ts, GameMaps/CourseArt.ts), so only the maps load here.
 
-        this.load.image("grass", "assets/tileSet/grass.png");
         // One map per hole, in play order (see MAPS in server/types/types.ts)
         for (const map of MAPS) {
             this.load.tilemapTiledJSON(map, `assets/maps/${map}.json`);
@@ -23,6 +20,8 @@ export class Boot extends Scene {
     }
 
     create() {
+        // The sky stays up behind every other scene from here on
+        this.scene.launch("Backdrop");
         this.scene.start("Preloader");
     }
 }

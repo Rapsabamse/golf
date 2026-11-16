@@ -2152,7 +2152,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -2176,7 +2181,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2195,7 +2205,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -2219,7 +2234,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2238,7 +2258,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -2262,7 +2287,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2281,7 +2311,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       },
       {
        "name": "solid",
@@ -2305,7 +2340,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2338,7 +2378,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2371,7 +2416,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2404,7 +2454,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2437,7 +2492,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
       }
      ]
     },
@@ -2474,7 +2534,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2511,7 +2581,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2548,7 +2628,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2585,7 +2675,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2622,7 +2722,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2659,7 +2769,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2696,7 +2816,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2733,7 +2863,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2770,7 +2910,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2807,7 +2957,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2844,7 +3004,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2881,7 +3051,17 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C45714"
+       "value": "#B9652F"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rail"
+      },
+      {
+       "name": "group",
+       "type": "string",
+       "value": "ring"
       }
      ]
     },
@@ -2930,7 +3110,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -2975,7 +3160,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -3020,7 +3210,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -3069,7 +3264,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -3118,7 +3318,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -3163,7 +3368,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -3208,7 +3418,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#5B6170"
+       "value": "#6A7287"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "rock"
       }
      ]
     },
@@ -3228,7 +3443,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -3248,7 +3468,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },
@@ -3268,7 +3493,12 @@
       {
        "name": "color",
        "type": "string",
-       "value": "#C114C4"
+       "value": "#C044D8"
+      },
+      {
+       "name": "material",
+       "type": "string",
+       "value": "bumper"
       }
      ]
     },

@@ -27,7 +27,6 @@ export class MainMenu extends Scene {
     private joinButton!: Button;
     private padTop = 0;
 
-    private background!: Phaser.GameObjects.TileSprite;
     /** Title, green and button, laid out around x = 0 at the 1280×720 design height. */
     private menu!: Phaser.GameObjects.Container;
     private uiScale = 1;
@@ -37,7 +36,6 @@ export class MainMenu extends Scene {
     }
 
     create() {
-        this.background = this.add.tileSprite(0, 0, 1, 1, "space");
         this.menu = this.add.container(0, 0);
 
         // Title
@@ -84,14 +82,10 @@ export class MainMenu extends Scene {
         EventBus.emit("current-scene-ready", this);
     }
 
-    /** Fill the screen with stars and keep the menu centred, at any size. */
+    /** Keep the menu centred at any size (the sky is the Backdrop scene). */
     private layout() {
         const { width, height, scale } = applyUiScale(this);
         this.uiScale = scale;
-
-        this.background
-            .setPosition(width / 2, height / 2)
-            .setSize(width, height);
 
         this.menu.setPosition(width / 2, (height - DESIGN_HEIGHT) / 2);
 

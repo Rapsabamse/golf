@@ -16,9 +16,6 @@ export class Preloader extends Scene
         const centerX = width / 2;
         const centerY = height / 2;
 
-        //  Starfield behind the loading bar, like the rest of the game
-        this.add.tileSprite(centerX, centerY, width, height, 'space');
-
         //  A thin fairway-green bar on a dark track
         const trackWidth = 320;
 

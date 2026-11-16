@@ -41,7 +41,6 @@ export class Game extends Phaser.Scene {
 
     create(data: { playerName: string }) {
         this.camera = this.cameras.main;
-        this.camera.setBackgroundColor(0x00ff00);
         this.camera.setZoom(getWorldZoom(this, PLAY_ZOOM));
 
         this.network = new Network();
@@ -133,10 +132,6 @@ export class Game extends Phaser.Scene {
                 this.gameStateHandler.onViewResize(ratio);
             } else {
                 this.camera.setZoom(this.camera.zoom * ratio);
-                this.currentMap.resizeBackground(
-                    this.camera.width,
-                    this.camera.height,
-                );
             }
         });
 
