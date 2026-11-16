@@ -171,4 +171,9 @@ export class Network {
             type: MessageTypeClient.START_GAME,
         });
     }
+
+    /** Host only: start a new game from the final scores. */
+    playAgain() {
+        this.send({ type: MessageTypeClient.PLAY_AGAIN });
+    }
 }

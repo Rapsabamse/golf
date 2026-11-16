@@ -279,11 +279,12 @@ export function tryCompleteRound(ctx: ServerContext) {
         return;
     }
 
-    ctx.holeIndex += 1;
+    const wasLastHole = ctx.holeIndex + 1 >= MAPS.length;
+
     ctx.ballLocations = [];
     clearRoundTracking(ctx);
 
-    // Everyone, including late joiners, plays the next hole
+    // Everyone, including late joiners, plays the next hole (or game)
     for (const player of ctx.players.values()) {
         player.roundState = { shots: 0, hasScored: false };
         player.waitingForNextRound = false;
@@ -291,6 +292,25 @@ export function tryCompleteRound(ctx: ServerContext) {
         player.state ??= { points: [] };
     }
 
+    if (wasLastHole) {
+        console.log("Last hole finished: game over");
+
+        ctx.gameState = GameState.GAME_OVER;
+
+        broadcast(
+            {
+                type: MessageTypeServer.GAME_STATE,
+                data: {
+                    state: GameState.GAME_OVER,
+                    playerList: getPlayersList(ctx.players),
+                },
+            },
+            ctx.players,
+        );
+        return;
+    }
+
+    ctx.holeIndex += 1;
     ctx.gameState = GameState.ROUND_COMPLETE;
 
     broadcast(

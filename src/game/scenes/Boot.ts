@@ -1,4 +1,5 @@
 import { Scene } from "phaser";
+import { MAPS } from "../../../server/types/types";
 
 export class Boot extends Scene {
     constructor() {
@@ -15,9 +16,10 @@ export class Boot extends Scene {
         this.load.image("goal", "assets/goal.png");
 
         this.load.image("grass", "assets/tileSet/grass.png");
-        this.load.tilemapTiledJSON("map1", "assets/maps/map1.json");
-        this.load.tilemapTiledJSON("map2", "assets/maps/map2.json");
-        this.load.tilemapTiledJSON("map3", "assets/maps/map3.json");
+        // One map per hole, in play order (see MAPS in server/types/types.ts)
+        for (const map of MAPS) {
+            this.load.tilemapTiledJSON(map, `assets/maps/${map}.json`);
+        }
     }
 
     create() {

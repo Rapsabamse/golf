@@ -8,6 +8,7 @@ import {
     drawPanel,
     drawPennant,
 } from "../ui/theme";
+import { Button } from "../ui/Button";
 
 const PADDING = 32;
 const ROW_HEIGHT = 44;
@@ -17,6 +18,8 @@ const HOLE_WIDTH = 46;
 const TOTAL_WIDTH = 70;
 /** Older holes scroll off so the card always fits the screen. */
 const MAX_HOLE_COLUMNS = 12;
+/** Space under the table for Play again on the final scores. */
+const FINAL_FOOTER_HEIGHT = 96;
 
 /** Total shots, skipping holes the player didn't play. */
 function getTotal(player: Player) {
@@ -31,20 +34,50 @@ function getHolesPlayed(player: Player) {
         .length;
 }
 
+/** Players who played every hole rank first, then by fewest shots. */
+function rank(players: Player[]) {
+    return [...players].sort(
+        (a, b) =>
+            getHolesPlayed(b) - getHolesPlayed(a) ||
+            getTotal(a) - getTotal(b),
+    );
+}
+
+/** Between holes: standings with a countdown to the next hole. */
+interface HoleView {
+    kind: "hole";
+    players: Player[];
+    ownId: string;
+    endsAt: number;
+}
+
+/** After the last hole: the winner, final scores and Play again. */
+interface FinalView {
+    kind: "final";
+    players: Player[];
+    ownId: string;
+    isHost: boolean;
+    hostName: string;
+    onPlayAgain: () => void;
+}
+
+type View = HoleView | FinalView;
+
 /**
- * Standings between holes: a card over the dimmed course with every
- * player's shots per hole, and a countdown to the next hole.
+ * Standings on a card over the dimmed course with every player's shots per
+ * hole: between holes (with a countdown) and at the end of the game.
  */
 export class Scoreboard {
     private readonly container: Phaser.GameObjects.Container;
     private countdown?: Phaser.Time.TimerEvent;
+    private playAgainButton?: Button;
 
     /** Screen size in interface units, set by layout(). */
     private screenWidth = 0;
     private screenHeight = 0;
 
     /** What is on show, so a resize can redraw it. */
-    private current?: { players: Player[]; ownId: string; endsAt: number };
+    private current?: View;
 
     constructor(private readonly scene: Phaser.Scene) {
         this.container = scene.add.container(0, 0).setDepth(10);
@@ -57,26 +90,71 @@ export class Scoreboard {
         this.screenHeight = height;
 
         if (this.current && this.container.visible) {
-            const { players, ownId, endsAt } = this.current;
-            this.show(players, ownId, Math.max(0, endsAt - Date.now()), false);
+            this.render(this.current, false);
         }
     }
 
-    show(players: Player[], ownId: string, durationMs: number, animate = true) {
+    /** Standings between holes, counting down to the next one. */
+    show(players: Player[], ownId: string, durationMs: number) {
+        this.render(
+            { kind: "hole", players, ownId, endsAt: Date.now() + durationMs },
+            true,
+        );
+    }
+
+    /** Final scores after the last hole. Only the host can start a new game. */
+    showFinal(
+        players: Player[],
+        ownId: string,
+        isHost: boolean,
+        hostName: string,
+        onPlayAgain: () => void,
+    ) {
+        this.render(
+            { kind: "final", players, ownId, isHost, hostName, onPlayAgain },
+            true,
+        );
+    }
+
+    /** The host changed while the final scores are up (the old host left). */
+    updateHost(isHost: boolean, hostName: string) {
+        if (this.current?.kind !== "final" || !this.container.visible) {
+            return;
+        }
+
+        this.render({ ...this.current, isHost, hostName }, false);
+    }
+
+    /** Enter key on the final scores. */
+    triggerPlayAgain() {
+        this.playAgainButton?.trigger();
+    }
+
+    private render(view: View, animate: boolean) {
         this.container.removeAll(true);
         this.countdown?.remove();
+        this.playAgainButton = undefined;
 
-        this.current = { players, ownId, endsAt: Date.now() + durationMs };
+        this.current = view;
+
+        const { players, ownId } = view;
+        const isFinal = view.kind === "final";
 
         const screenWidth = this.screenWidth;
         const screenHeight = this.screenHeight;
 
-        // Players who played every hole rank first, then by fewest shots
-        const sorted = [...players].sort(
-            (a, b) =>
-                getHolesPlayed(b) - getHolesPlayed(a) ||
-                getTotal(a) - getTotal(b),
-        );
+        const sorted = rank(players);
+
+        // Everyone level with the best player (same holes, same total) leads
+        const best = sorted[0];
+        const leaders =
+            best && getHolesPlayed(best) > 0
+                ? sorted.filter(
+                      (player) =>
+                          getHolesPlayed(player) === getHolesPlayed(best) &&
+                          getTotal(player) === getTotal(best),
+                  )
+                : [];
 
         const holeCount = Math.max(
             0,
@@ -95,7 +173,12 @@ export class Scoreboard {
             holes.length * HOLE_WIDTH +
             TOTAL_WIDTH;
         const cardHeight =
-            PADDING * 2 + 44 + 30 + 34 + sorted.length * ROW_HEIGHT;
+            PADDING * 2 +
+            44 +
+            30 +
+            34 +
+            sorted.length * ROW_HEIGHT +
+            (isFinal ? FINAL_FOOTER_HEIGHT : 0);
 
         const left = Math.round((screenWidth - cardWidth) / 2);
         const top = Math.round((screenHeight - cardHeight) / 2);
@@ -116,15 +199,18 @@ export class Scoreboard {
             this.scene,
             left + PADDING,
             y,
-            `Hole ${holeCount} complete`,
+            isFinal
+                ? this.getWinnerTitle(leaders, ownId)
+                : `Hole ${holeCount} complete`,
             { size: TYPE.title, bold: true },
         );
 
+        // Countdown between holes; on the final scores just what this is
         const countdownText = addText(
             this.scene,
             left + cardWidth - PADDING,
             y + 10,
-            "",
+            isFinal ? `Final scores, ${holeCount} holes` : "",
             { size: TYPE.body, color: CSS.muted },
         ).setOrigin(1, 0);
 
@@ -161,7 +247,7 @@ export class Scoreboard {
         sorted.forEach((player, index) => {
             const centerY = y + ROW_HEIGHT / 2;
             const isOwn = player.id === ownId;
-            const isLeader = index === 0 && getHolesPlayed(player) > 0;
+            const isLeader = leaders.includes(player);
 
             if (isOwn) {
                 card.fillStyle(COLORS.panelHighlight, 1);
@@ -174,7 +260,7 @@ export class Scoreboard {
                 );
             }
 
-            // The leader holds the flag
+            // The leader (or everyone tied for the lead) holds the flag
             if (isLeader) {
                 drawPennant(
                     card,
@@ -248,7 +334,79 @@ export class Scoreboard {
             y += ROW_HEIGHT;
         });
 
-        // Countdown to the next hole
+        if (view.kind === "final") {
+            this.addFinalFooter(view, left, cardWidth, y);
+        } else {
+            this.startCountdown(countdownText, view.endsAt - Date.now());
+        }
+
+        // One entrance: the card settles in (not again when redrawn on resize)
+        this.container.setVisible(true);
+
+        if (animate) {
+            this.container.setAlpha(0);
+            this.scene.tweens.add({
+                targets: this.container,
+                alpha: 1,
+                duration: 250,
+                ease: "Quad.easeOut",
+            });
+        }
+    }
+
+    private getWinnerTitle(leaders: Player[], ownId: string) {
+        if (leaders.length === 0) {
+            return "Game over";
+        }
+
+        if (leaders.length > 1) {
+            return "It's a tie!";
+        }
+
+        return leaders[0].id === ownId ? "You win!" : `${leaders[0].name} wins!`;
+    }
+
+    /** Play again for the host; everyone else is told who they are waiting for. */
+    private addFinalFooter(
+        view: FinalView,
+        left: number,
+        cardWidth: number,
+        tableBottom: number,
+    ) {
+        const centerX = left + cardWidth / 2;
+        const centerY = tableBottom + FINAL_FOOTER_HEIGHT / 2 + 4;
+
+        if (view.isHost) {
+            this.playAgainButton = new Button(
+                this.scene,
+                centerX,
+                centerY,
+                "Play again",
+                240,
+            ).setOnClick(view.onPlayAgain);
+
+            this.container.add(this.playAgainButton);
+            return;
+        }
+
+        this.container.add(
+            addText(
+                this.scene,
+                centerX,
+                centerY,
+                `Waiting for ${view.hostName} to start a new game`,
+                { size: TYPE.body, color: CSS.muted },
+            ).setOrigin(0.5),
+        );
+    }
+
+    /** Count down to the next hole in whole seconds. */
+    private startCountdown(
+        countdownText: Phaser.GameObjects.Text,
+        durationMs: number,
+    ) {
+        durationMs = Math.max(0, durationMs);
+
         let secondsLeft = Math.ceil(durationMs / 1000);
         const countdownLabel = () =>
             secondsLeft > 0 ? `Next hole in ${secondsLeft}` : "Teeing off";
@@ -276,25 +434,13 @@ export class Scoreboard {
                 },
             });
         }
-
-        // One entrance: the card settles in (not again when redrawn on resize)
-        this.container.setVisible(true);
-
-        if (animate) {
-            this.container.setAlpha(0);
-            this.scene.tweens.add({
-                targets: this.container,
-                alpha: 1,
-                duration: 250,
-                ease: "Quad.easeOut",
-            });
-        }
     }
 
     hide() {
         this.countdown?.remove();
         this.countdown = undefined;
         this.current = undefined;
+        this.playAgainButton = undefined;
         this.container.setVisible(false);
     }
 

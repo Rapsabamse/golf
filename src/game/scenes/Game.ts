@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { EventBus } from "../EventBus";
 import { Network } from "../Networking/Network";
-import { Player } from "../../../server/types/types";
+import { GameState, Player } from "../../../server/types/types";
 import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
@@ -203,6 +203,11 @@ export class Game extends Phaser.Scene {
                 this.ballManager.removeMissingPlayers(players);
             }
 
+            // On the final scores, Play again follows the host
+            if (this.network.getGameState() === GameState.GAME_OVER) {
+                this.gameStateHandler.refreshFinalScores();
+            }
+
             this.ui.updateUI(
                 this.network.getGameState(),
                 this.network.getIsHost(),
@@ -228,9 +233,13 @@ export class Game extends Phaser.Scene {
             this.ui.refreshPlayerPanel(this.network.getGameState());
         });
 
-        // Enter runs the main action (Start game / Lock in shot)
+        // Enter runs the main action (Start game / Lock in shot / Play again)
         this.input.keyboard?.on("keydown-ENTER", () => {
-            this.ui.triggerAction();
+            if (this.network.getGameState() === GameState.GAME_OVER) {
+                this.scoreboard.triggerPlayAgain();
+            } else {
+                this.ui.triggerAction();
+            }
         });
     }
 

@@ -49,15 +49,18 @@ export function handleConnection(
 
     // Joining a game in progress: send where everyone's ball is, so the
     // new player can watch until the next hole
-    const courseState: CourseState | undefined = shouldWait
-        ? {
-              players: getPlayersList(ctx.players).filter(
-                  (other) => !other.waitingForNextRound,
-              ),
-              ballLocations: ctx.ballLocations,
-              scoringPlayers: getScoringPlayers(ctx),
-          }
-        : undefined;
+    const gameOver = ctx.gameState === GameState.GAME_OVER;
+
+    const courseState: CourseState | undefined =
+        shouldWait && !gameOver
+            ? {
+                  players: getPlayersList(ctx.players).filter(
+                      (other) => !other.waitingForNextRound,
+                  ),
+                  ballLocations: ctx.ballLocations,
+                  scoringPlayers: getScoringPlayers(ctx),
+              }
+            : undefined;
 
     // Send the current game state and map to the client
     socket.send(
@@ -70,6 +73,8 @@ export function handleConnection(
                 mapName: getCurrentMapName(ctx),
                 hole: ctx.holeIndex + 1,
                 courseState,
+                // Joining on the final scores: show them too
+                playerList: gameOver ? getPlayersList(ctx.players) : undefined,
             },
         }),
     );

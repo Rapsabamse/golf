@@ -240,7 +240,11 @@ export class GameUI {
         const self = players.find((player) => player.id === ownId);
         const others = players.filter((player) => player.id !== ownId);
 
-        if (shouldWait && gameState !== GameState.ROUND_COMPLETE) {
+        if (
+            shouldWait &&
+            gameState !== GameState.ROUND_COMPLETE &&
+            gameState !== GameState.GAME_OVER
+        ) {
             return {
                 title: "Hole in progress",
                 body: "You'll tee off on the next hole. Watch how the others play this one.",
@@ -408,6 +412,11 @@ export class GameUI {
                 "Enter",
                 this.lastState === GameState.WAITING ? "Start" : "Lock in",
             ]);
+        } else if (
+            this.lastState === GameState.GAME_OVER &&
+            this.network.getIsHost()
+        ) {
+            hints.push(["Enter", "Play again"]);
         }
 
         let x = 0;

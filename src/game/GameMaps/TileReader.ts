@@ -22,6 +22,18 @@ function getWallColor(object: TiledObject): number {
     return Phaser.Display.Color.HexStringToColor(color).color;
 }
 
+/** Read a true/false property set on an object in Tiled. */
+function getBooleanProperty(
+    object: TiledObject,
+    name: string,
+): boolean | undefined {
+    const property = (
+        object.properties as { name: string; value: unknown }[] | undefined
+    )?.find((candidate) => candidate.name === name);
+
+    return typeof property?.value === "boolean" ? property.value : undefined;
+}
+
 export class TiledMapLoader {
     load(scene: Phaser.Scene, key: string): GeneratedMap {
         const map = scene.make.tilemap({ key });
@@ -69,9 +81,31 @@ export class TiledMapLoader {
 
         for (const object of objectsLayer.objects) {
             switch (object.name) {
-                case "Wall":
+                case "Wall": {
+                    const drawnBefore = wallGraphics.length;
+                    const bodiesBefore = bodies.length;
+
                     this.createWall(scene, object, bodies, wallGraphics);
+
+                    // Hidden walls (visible unticked in Tiled) still block
+                    // balls. Maps put a thick hidden wall under each thin
+                    // rail, because a full-power ball can pass straight
+                    // through a 40px wall in one physics step.
+                    if (object.visible === false) {
+                        for (const graphics of wallGraphics.slice(drawnBefore)) {
+                            graphics.setVisible(false);
+                        }
+                    }
+
+                    // Walls with the property solid = false are only drawn
+                    // (the rails on top of those hidden walls)
+                    if (getBooleanProperty(object, "solid") === false) {
+                        for (const body of bodies.splice(bodiesBefore)) {
+                            scene.matter.world.remove(body);
+                        }
+                    }
                     break;
+                }
 
                 case "Goal":
                     goalPosition = new Phaser.Math.Vector2(

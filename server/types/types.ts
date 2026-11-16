@@ -1,10 +1,12 @@
 import { WebSocket } from "ws";
 
 /**
- * The holes in play order. Shared by the server (which decides which hole is
- * being played) and the client (which loads the map with that name).
+ * The holes in play order, from the warm-up to the hardest. Shared by the
+ * server (which decides which hole is being played) and the client (which
+ * loads the map with that name from public/assets/maps).
+ *   map1 Warm-up · map2 Dogleg · map3 Pinball · map4 Switchback · map5 Orbit
  */
-export const MAPS = ["map1", "map2", "map3"];
+export const MAPS = ["map1", "map2", "map3", "map4", "map5"];
 
 /**
  * Fastest shot the server accepts. Matches the client's aim limit
@@ -20,6 +22,8 @@ export enum MessageTypeClient {
     PLAYER_GOAL,
     LOADED_NEW_MAP,
     NAME,
+    /** Host starts a new game from the final scores. */
+    PLAY_AGAIN,
 }
 
 export enum MessageTypeServer {
@@ -35,6 +39,8 @@ export enum GameState {
     SIMULATING,
     SIMULATING_HOST,
     ROUND_COMPLETE,
+    /** The last hole is done: final scores until the host plays again. */
+    GAME_OVER,
 }
 
 export interface Vector {

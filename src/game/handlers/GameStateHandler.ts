@@ -30,6 +30,9 @@ export class GameStateHandler {
     /** True while the camera shows the whole course instead of following a ball. */
     private framingCourse = false;
 
+    private lastState?: GameState;
+    private finalPlayers: Player[] = [];
+
     /** The map switch scheduled after the scoreboard, if one is pending. */
     private pendingMapLoad?: {
         timer: Phaser.Time.TimerEvent;
@@ -50,6 +53,16 @@ export class GameStateHandler {
     ) {}
 
     handle(gamestate: GameState, data?: ServerData) {
+        // The host pressed Play again: back to hole 1 with fresh balls
+        const newGameStarted =
+            this.lastState === GameState.GAME_OVER &&
+            gamestate === GameState.PLANNING;
+        this.lastState = gamestate;
+
+        if (newGameStarted) {
+            this.startNewGame(data?.mapName ?? getBaseMap());
+        }
+
         if (gamestate === GameState.WAITING) {
             // Game was reset: drop the scheduled switch to the next hole
             this.finishPendingMapLoad(false);
@@ -98,6 +111,10 @@ export class GameStateHandler {
 
             case GameState.ROUND_COMPLETE:
                 this.handleRoundComplete(data);
+                break;
+
+            case GameState.GAME_OVER:
+                this.handleGameOver(data);
                 break;
         }
 
@@ -203,6 +220,53 @@ export class GameStateHandler {
         this.pendingMapLoad = { timer, run };
     }
 
+    private handleGameOver(data?: ServerData) {
+        if (!data?.playerList) {
+            return;
+        }
+
+        this.setScoredPlayers([]);
+        this.showFinalScores(data.playerList);
+    }
+
+    /** Final scores, with Play again for whoever is host right now. */
+    showFinalScores(players: Player[] = this.finalPlayers) {
+        this.finalPlayers = players;
+
+        const host = this.network
+            .getPlayers()
+            .find((player) => player.id === this.network.getHostId());
+
+        this.scoreboard.showFinal(
+            players,
+            this.network.getPlayerId(),
+            this.network.getIsHost(),
+            host?.name ?? "the host",
+            () => this.network.playAgain(),
+        );
+    }
+
+    /** The player list changed on the final scores: the host may have left. */
+    refreshFinalScores() {
+        const host = this.network
+            .getPlayers()
+            .find((player) => player.id === this.network.getHostId());
+
+        this.scoreboard.updateHost(
+            this.network.getIsHost(),
+            host?.name ?? "the host",
+        );
+    }
+
+    private startNewGame(mapName: string) {
+        this.scoreboard.hide();
+        this.setScoredPlayers([]);
+
+        this.loadMap(mapName);
+        this.ballManager.updateBalls(this.network.getPlayers(), true);
+        this.playCamera();
+    }
+
     /** Cancel the pending map switch, optionally doing it right away. */
     private finishPendingMapLoad(runNow: boolean) {
         const pending = this.pendingMapLoad;
@@ -265,7 +329,8 @@ export class GameStateHandler {
                 availableWidth / bounds.width,
                 availableHeight / bounds.height,
             ),
-            getWorldZoom(this.scene, 0.3),
+            // Further out than the mouse wheel allows, so big holes still fit
+            getWorldZoom(this.scene, 0.15),
             getWorldZoom(this.scene, 1),
         );
 

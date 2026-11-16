@@ -69,6 +69,15 @@ export function handleMessages(
             }
             break;
 
+        // The host starts a new game from the final scores, with everyone
+        // who is connected (including anyone who joined in the meantime)
+        case MessageTypeClient.PLAY_AGAIN:
+            if (ctx.gameState === GameState.GAME_OVER && isHost) {
+                console.log("Host started a new game");
+                startGame(ctx);
+            }
+            break;
+
         // Client sends their last selected shot
         case MessageTypeClient.SHOT_SELECTED: {
             if (ctx.gameState !== GameState.PLANNING || !isPlaying) {
