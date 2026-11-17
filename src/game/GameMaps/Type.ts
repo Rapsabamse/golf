@@ -11,6 +11,9 @@ export interface GeneratedMap {
     onWallHit(body: MatterJS.BodyType): void;
 
 
+    /** Call every frame. */
+    update(): void;
+
     getBallSpawnPosition(
         playerIndex: number,
         playerCount: number,

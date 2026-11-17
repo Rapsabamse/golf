@@ -2,7 +2,9 @@ import { SpawnLine } from "../GameHelpers/SpawnLine";
 import { Goal } from "./Goal";
 import { GeneratedMap } from "./Type";
 import * as Phaser from "phaser";
+import { CourseBake } from "./CourseBake";
 import {
+    DEPTH,
     TURF_TEXTURE,
     drawCourseSurface,
     drawTee,
@@ -58,6 +60,9 @@ function getBooleanProperty(
 export class TiledMapLoader {
     load(scene: Phaser.Scene, key: string): GeneratedMap {
         const map = scene.make.tilemap({ key });
+
+        // Everything added from here on that never changes is drawn once (see below)
+        const existing = new Set(scene.children.list);
 
         const bodies: MatterJS.BodyType[] = [];
         const wallGraphics: Phaser.GameObjects.Graphics[] = [];
@@ -173,6 +178,26 @@ export class TiledMapLoader {
         const goal = new Goal(scene, goalPosition);
         const tee = drawTee(scene, spawnLine.start, spawnLine.end);
 
+        const bounds = new Phaser.Geom.Rectangle(
+            0,
+            0,
+            map.widthInPixels,
+            map.heightInPixels,
+        );
+
+        // The course art up to the walls never changes: draw it into one
+        // texture. Bumper flashes, the flag and the balls stay live above it.
+        const bake = new CourseBake(
+            scene,
+            scene.children.list.filter((object) => {
+                const item = object as unknown as Phaser.GameObjects.Components.Depth &
+                    Phaser.GameObjects.Components.Visible;
+                return !existing.has(object) && item.visible && item.depth <= DEPTH.wall;
+            }),
+            bounds,
+            DEPTH.floatShadow,
+        );
+
         return {
             goal,
 
@@ -183,18 +208,19 @@ export class TiledMapLoader {
                 }
             },
 
-            bounds: new Phaser.Geom.Rectangle(
-                0,
-                0,
-                map.widthInPixels,
-                map.heightInPixels,
-            ),
+            bounds,
+
+            update() {
+                bake.update();
+            },
 
             getBallSpawnPosition(playerIndex, playerCount) {
                 return spawnLine!.getPosition(playerIndex, playerCount);
             },
 
             destroy() {
+                bake.destroy();
+
                 for (const body of bodies) {
                     scene.matter.world.remove(body);
                 }

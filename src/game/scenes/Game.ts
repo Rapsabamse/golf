@@ -243,6 +243,7 @@ export class Game extends Phaser.Scene {
     }
 
     update() {
+        this.currentMap.update();
         this.ballManager.update();
     }
 
