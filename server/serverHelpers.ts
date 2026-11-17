@@ -41,6 +41,7 @@ export function getPlayersList(
         id: player.id,
         name: player.name,
         color: player.color,
+        catchphrase: player.catchphrase,
         ready: playersReady?.has(player.id) ?? false,
         roundState: player.roundState,
         state: {

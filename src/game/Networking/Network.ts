@@ -38,19 +38,19 @@ export class Network {
     /** Hosting or joining failed, or the server can't be reached. */
     onLobbyError?: (error: string) => void;
 
-    /** Make a new lobby with its own code. */
-    host(playerName: string) {
+    /** Make a new lobby with its own code. An empty catchphrase gets a random one. */
+    host(playerName: string, catchphrase: string) {
         this.request({
             type: MessageTypeClient.HOST_LOBBY,
-            data: { name: playerName },
+            data: { name: playerName, catchphrase },
         });
     }
 
     /** Join the lobby with this code. */
-    join(code: string, playerName: string) {
+    join(code: string, playerName: string, catchphrase: string) {
         this.request({
             type: MessageTypeClient.JOIN_LOBBY,
-            data: { code, name: playerName },
+            data: { code, name: playerName, catchphrase },
         });
     }
 

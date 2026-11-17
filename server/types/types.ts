@@ -24,9 +24,9 @@ export enum MessageTypeClient {
     NAME,
     /** Host starts a new game from the final scores. */
     PLAY_AGAIN,
-    /** First message: make a new lobby. Data: { name }. */
+    /** First message: make a new lobby. Data: { name, catchphrase? }. */
     HOST_LOBBY,
-    /** First message: join a lobby. Data: { code, name }. */
+    /** First message: join a lobby. Data: { code, name, catchphrase? }. */
     JOIN_LOBBY,
 }
 
@@ -59,6 +59,8 @@ export interface Player {
     name: string;
     /** Ball colour, e.g. 0xff5252. Unique within the game. */
     color?: number;
+    /** Shown over the hole when this player's ball drops in. */
+    catchphrase?: string;
     /** Has locked in a shot this planning phase. */
     ready?: boolean;
     socket?: WebSocket;
@@ -131,3 +133,20 @@ export interface BallLocation {
     x: number;
     y: number;
 }
+
+/**
+ * For players who don't pick their own catchphrase. The menu offers one as
+ * the field's placeholder; the server picks one if none is sent.
+ */
+export const DEFAULT_CATCHPHRASES = [
+    "In the hole!",
+    "Sunk it!",
+    "Nothing but cup!",
+    "Get in the hole!",
+    "Called it!",
+    "Too easy!",
+    "Pure putt!",
+    "Down it goes!",
+    "Like a pro!",
+    "Bullseye!",
+];

@@ -1,9 +1,12 @@
 import { ServerContext, createServerContext } from "./serverState";
+import { DEFAULT_CATCHPHRASES } from "./types/types";
 
 /** Letters for lobby codes. */
 const CODE_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const CODE_LENGTH = 4;
 const MAX_NAME_LENGTH = 16;
+const MAX_CATCHPHRASE_LENGTH = 24;
+
 
 /** Every running lobby, by its code. Each one is a separate game. */
 const lobbies = new Map<string, ServerContext>();
@@ -41,6 +44,24 @@ export function removeLobbyIfEmpty(lobby: ServerContext) {
 /** "xk li" → "XKLI": codes are typed by people, so be forgiving. */
 export function normalizeCode(code: string) {
     return code.toUpperCase().replace(/[^A-Z]/g, "");
+}
+
+/** The player's own catchphrase, or a random one if they didn't pick one. */
+export function cleanCatchphrase(catchphrase: unknown): string {
+    const cleaned =
+        typeof catchphrase === "string"
+            ? catchphrase
+                  .replace(/[\u0000-\u001f\u007f]/g, "")
+                  .trim()
+                  .slice(0, MAX_CATCHPHRASE_LENGTH)
+            : "";
+
+    return (
+        cleaned ||
+        DEFAULT_CATCHPHRASES[
+            Math.floor(Math.random() * DEFAULT_CATCHPHRASES.length)
+        ]
+    );
 }
 
 export function cleanName(name: unknown): string {

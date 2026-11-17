@@ -2,20 +2,27 @@ import * as Phaser from "phaser";
 import { Scene } from "phaser";
 
 import { EventBus } from "../EventBus";
-import { getRandomName } from "../GameHelpers/MenuHelpers";
+import {
+    getRandomCatchphrase,
+    getRandomName,
+} from "../GameHelpers/MenuHelpers";
 import { Button } from "../ui/Button";
 import { Network } from "../Networking/Network";
 import { COLORS, CSS, FONTS, TYPE, addText, drawPennant } from "../ui/theme";
 import { DESIGN_HEIGHT, applyUiScale, onResize } from "../ui/layout";
 
 const PAD_WIDTH = 460;
-const PAD_HEIGHT = 180;
+const PAD_HEIGHT = 290;
 const PAD_LIP = 8;
 const PAD_RADIUS = 28;
 const STRIPE_WIDTH = 34;
 
 const INPUT_WIDTH = 320;
 const INPUT_HEIGHT = 52;
+const MAX_CATCHPHRASE_LENGTH = 24;
+/** Adventor with its real letter heights, for the text fields (see the style). */
+const FIELD_FONT = "Adventor Field";
+const FIELD_FONT_BOLD = "Adventor Field Bold";
 
 const TURF = 0x6fbf3a;
 const TURF_STRIPE = 0x7dcb48;
@@ -33,6 +40,8 @@ type MenuMode = "choose" | "join";
 
 export class MainMenu extends Scene {
     private nameInput!: HTMLInputElement;
+    /** Shown when your ball drops in; left empty, the greyed-out one is used. */
+    private catchphraseInput!: HTMLInputElement;
     private codeInput!: HTMLInputElement;
     private hostButton!: Button;
     private joinButton!: Button;
@@ -62,7 +71,7 @@ export class MainMenu extends Scene {
         this.menu = this.add.container(0, 0);
 
         // Title
-        const title = addText(this, 0, 150, "GOLF - golf", {
+        const title = addText(this, 0, 110, "GOLF - golf", {
             size: TYPE.display,
             bold: true,
         })
@@ -72,20 +81,28 @@ export class MainMenu extends Scene {
         const tagline = addText(
             this,
             0,
-            228,
+            184,
             "Mini golf where everyone putts at once.",
             { size: TYPE.label, color: CSS.muted },
         ).setOrigin(0.5);
 
-        // The putting green the name field sits on
-        this.padTop = 300;
+        // The putting green the fields sit on
+        this.padTop = 232;
         const pad = this.drawPad(-PAD_WIDTH / 2, this.padTop);
 
-        const nameLabel = addText(this, 0, this.padTop + 34, "Your name", {
+        const nameLabel = addText(this, 0, this.padTop + 30, "Your name", {
             size: TYPE.body,
             bold: true,
             color: CSS.ink,
         }).setOrigin(0.5, 0);
+
+        const catchphraseLabel = addText(
+            this,
+            0,
+            this.padTop + 156,
+            "Catchphrase",
+            { size: TYPE.body, bold: true, color: CSS.ink },
+        ).setOrigin(0.5, 0);
 
         this.rowY = this.padTop + PAD_HEIGHT + PAD_LIP + 60;
 
@@ -140,6 +157,7 @@ export class MainMenu extends Scene {
             tagline,
             pad,
             nameLabel,
+            catchphraseLabel,
             this.hostButton,
             this.joinButton,
             this.confirmJoinButton,
@@ -162,7 +180,13 @@ export class MainMenu extends Scene {
 
         this.menu.setPosition(width / 2, (height - DESIGN_HEIGHT) / 2);
 
-        this.positionInput(this.nameInput, 0, this.padTop + 108, INPUT_WIDTH);
+        this.positionInput(this.nameInput, 0, this.padTop + 104, INPUT_WIDTH);
+        this.positionInput(
+            this.catchphraseInput,
+            0,
+            this.padTop + 230,
+            INPUT_WIDTH,
+        );
         this.positionInput(
             this.codeInput,
             -ROW_OFFSET,
@@ -205,6 +229,7 @@ export class MainMenu extends Scene {
         this.joinButton.setEnabled(!busy);
         this.confirmJoinButton.setEnabled(!busy);
         this.nameInput.disabled = busy;
+        this.catchphraseInput.disabled = busy;
         this.codeInput.disabled = busy;
     }
 
@@ -212,9 +237,17 @@ export class MainMenu extends Scene {
         return this.nameInput.value.trim() || this.nameInput.placeholder;
     }
 
+    /** Like the name: the greyed-out suggestion unless you type your own. */
+    private getCatchphrase() {
+        return (
+            this.catchphraseInput.value.trim() ||
+            this.catchphraseInput.placeholder
+        );
+    }
+
     private hostGame() {
         this.showStatus("Making your game…");
-        this.connect().host(this.getName());
+        this.connect().host(this.getName(), this.getCatchphrase());
     }
 
     private joinGame() {
@@ -227,7 +260,11 @@ export class MainMenu extends Scene {
         }
 
         this.showStatus(`Joining ${code}…`);
-        this.connect().join(code, this.getName());
+        this.connect().join(
+            code,
+            this.getName(),
+            this.getCatchphrase(),
+        );
     }
 
     /** One connection for the menu, kept if a code is wrong so you can try again. */
@@ -290,6 +327,18 @@ export class MainMenu extends Scene {
 
         this.nameInput = this.createInput("golf-name-input", getRandomName(), 16, "Your name");
         this.nameInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                this.catchphraseInput.focus();
+            }
+        });
+
+        this.catchphraseInput = this.createInput(
+            "golf-name-input",
+            getRandomCatchphrase(),
+            MAX_CATCHPHRASE_LENGTH,
+            "Catchphrase",
+        );
+        this.catchphraseInput.addEventListener("keydown", (event) => {
             if (event.key !== "Enter") {
                 return;
             }
@@ -354,6 +403,7 @@ export class MainMenu extends Scene {
 
     private removeInputs() {
         this.nameInput?.remove();
+        this.catchphraseInput?.remove();
         this.codeInput?.remove();
     }
 
@@ -375,11 +425,13 @@ export class MainMenu extends Scene {
         // Interface units to CSS pixels
         const toCss = this.uiScale * (bounds.width / this.scale.width);
 
+        const fieldHeight = Math.round(INPUT_HEIGHT * toCss);
+
         Object.assign(input.style, {
             left: `${bounds.left + window.scrollX + (this.menu.x + x) * toCss}px`,
             top: `${bounds.top + window.scrollY + (this.menu.y + y) * toCss}px`,
             width: `${width * toCss}px`,
-            height: `${INPUT_HEIGHT * toCss}px`,
+            height: `${fieldHeight}px`,
             fontSize: `${22 * toCss}px`,
             borderRadius: `${14 * toCss}px`,
         });
@@ -393,6 +445,24 @@ export class MainMenu extends Scene {
         const style = document.createElement("style");
         style.id = STYLE_ID;
         style.textContent = `
+            /*
+             * Adventor's font file says its letters are shorter than they
+             * are, and Chrome clips text in a field (placeholders too) to
+             * that: accents like Å and É and the tops of capitals get cut.
+             * The fields use the same files with the real heights.
+             */
+            @font-face {
+                font-family: "${FIELD_FONT}";
+                src: url("assets/fonts/texgyreadventor-regular.otf") format("opentype");
+                ascent-override: 110%;
+                descent-override: 30%;
+            }
+            @font-face {
+                font-family: "${FIELD_FONT_BOLD}";
+                src: url("assets/fonts/texgyreadventor-bold.otf") format("opentype");
+                ascent-override: 110%;
+                descent-override: 30%;
+            }
             .golf-name-input {
                 position: absolute;
                 transform: translate(-50%, -50%);
@@ -402,14 +472,14 @@ export class MainMenu extends Scene {
                 border-radius: 14px;
                 background: #eef1fb;
                 color: ${CSS.ink};
-                font-family: ${FONTS.bold};
+                font-family: "${FIELD_FONT_BOLD}", ${FONTS.bold};
                 text-align: center;
                 box-shadow: 0 4px 0 #3f7a1f;
                 outline: none;
             }
             .golf-name-input::placeholder {
                 color: #6b7a63;
-                font-family: ${FONTS.regular};
+                font-family: "${FIELD_FONT}", ${FONTS.regular};
             }
             .golf-code-input {
                 letter-spacing: 0.3em;
@@ -427,5 +497,9 @@ export class MainMenu extends Scene {
         `;
 
         document.head.appendChild(style);
+
+        // Load them now rather than when the fields first draw
+        void document.fonts.load(`22px "${FIELD_FONT}"`);
+        void document.fonts.load(`22px "${FIELD_FONT_BOLD}"`);
     }
 }

@@ -5,6 +5,7 @@ import { handleConnection } from "./handlers/connectionHandler";
 import { handleClose } from "./handlers/closeHandler";
 import { ServerContext } from "./serverState";
 import {
+    cleanCatchphrase,
     cleanName,
     createLobby,
     findLobby,
@@ -38,7 +39,10 @@ wss.on("connection", (socket: WebSocket) => {
 
     /** Before joining a lobby, a player can only host or join one. */
     const handleLobbyRequest = (data: RawData) => {
-        let message: { type?: unknown; data?: { code?: unknown; name?: unknown } };
+        let message: {
+            type?: unknown;
+            data?: { code?: unknown; name?: unknown; catchphrase?: unknown };
+        };
         try {
             message = JSON.parse(data.toString());
         } catch {
@@ -50,10 +54,12 @@ wss.on("connection", (socket: WebSocket) => {
         }
 
         const name = cleanName(message.data?.name);
+        // Picked once here, so everyone sees the same one all game
+        const catchphrase = cleanCatchphrase(message.data?.catchphrase);
 
         if (message.type === MessageTypeClient.HOST_LOBBY) {
             lobby = createLobby();
-            handleConnection(socket, playerId, lobby, name);
+            handleConnection(socket, playerId, lobby, name, catchphrase);
             return;
         }
 
@@ -74,7 +80,7 @@ wss.on("connection", (socket: WebSocket) => {
             }
 
             lobby = found;
-            handleConnection(socket, playerId, lobby, name);
+            handleConnection(socket, playerId, lobby, name, catchphrase);
         }
     };
 

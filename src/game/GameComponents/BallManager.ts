@@ -13,11 +13,15 @@ export interface Ball {
     body: MatterJS.BodyType;
     inWorld: boolean;
     color: number;
+    /** The player's catchphrase, shown when the ball drops in. */
+    catchphrase: string;
 }
 
 const BALLRADIUS = 12;
 const LABEL_OFFSET_Y = BALLRADIUS + 8;
 const DEFAULT_BALL_COLOR = 0xffffff;
+/** Until the server tells us the player's own (it always does). */
+const DEFAULT_CATCHPHRASE = "In the hole!";
 
 /** Shot speed that counts as a full-power putt for sound volume. */
 const FULL_POWER_SPEED = 40;
@@ -266,6 +270,7 @@ export class BallManager {
             body,
             inWorld: true,
             color: DEFAULT_BALL_COLOR,
+            catchphrase: DEFAULT_CATCHPHRASE,
         };
     }
 
@@ -274,6 +279,7 @@ export class BallManager {
         const isOwn = player.id === this.getPlayerId();
 
         ball.color = player.color ?? DEFAULT_BALL_COLOR;
+        ball.catchphrase = player.catchphrase ?? DEFAULT_CATCHPHRASE;
 
         // Your own ball gets a thicker outline so it's easy to spot
         const outlineWidth = isOwn ? 4 : 2;
@@ -324,7 +330,7 @@ export class BallManager {
         });
 
         const text = this.scene.add
-            .text(hole.x, hole.y - 30, "In the hole!", {
+            .text(hole.x, hole.y - 30, ball.catchphrase, {
                 fontFamily: FONTS.bold,
                 fontSize: "30px",
                 color: toCssColor(ball.color),

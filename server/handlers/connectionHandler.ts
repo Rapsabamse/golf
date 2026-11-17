@@ -20,6 +20,7 @@ export function handleConnection(
     playerId: string,
     ctx: ServerContext,
     name = "Player",
+    catchphrase?: string,
 ) {
     const shouldWait = ctx.gameState !== GameState.WAITING;
 
@@ -29,6 +30,7 @@ export function handleConnection(
         state: { points: [] },
         waitingForNextRound: shouldWait,
         name,
+        catchphrase,
         color: pickColor(ctx),
     };
 

@@ -1,3 +1,5 @@
+import { DEFAULT_CATCHPHRASES } from "../../../server/types/types";
+
 const randomNamesList: string[] = [
     "Lord of the Greens",
     "King of the Fairway",
@@ -50,6 +52,12 @@ const randomNamesList: string[] = [
     "Fairway to Heaven",
     "Frida Kranstege",
 ];
+
+export function getRandomCatchphrase(): string {
+    return DEFAULT_CATCHPHRASES[
+        Math.floor(Math.random() * DEFAULT_CATCHPHRASES.length)
+    ];
+}
 
 export function getRandomName(): string {
     let randomIndex = Math.floor(Math.random() * randomNamesList.length);
