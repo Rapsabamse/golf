@@ -9,8 +9,8 @@ const ROW_HEIGHT = 36;
 const DOT_RADIUS = 7;
 
 /**
- * Players in the top-right corner: everyone in the lobby, and during
- * planning who has locked in, who is still aiming and who has holed out.
+ * Players in the top-right corner while aiming: who has locked in, who is
+ * still aiming and who has holed out. (The lobby screen lists the lobby.)
  */
 export class PlayerPanel {
     private readonly container: Phaser.GameObjects.Container;
@@ -30,9 +30,8 @@ export class PlayerPanel {
     }
 
     update(gameState: GameState) {
-        const shown =
-            gameState === GameState.WAITING ||
-            gameState === GameState.PLANNING;
+        // In the lobby, the lobby screen lists the players
+        const shown = gameState === GameState.PLANNING;
 
         this.container.setVisible(shown);
 
@@ -43,7 +42,6 @@ export class PlayerPanel {
         this.container.removeAll(true);
 
         const players = this.network.getPlayers();
-        const planning = gameState === GameState.PLANNING;
         const ownId = this.network.getPlayerId();
 
         const background = this.scene.add.graphics();
@@ -58,24 +56,21 @@ export class PlayerPanel {
         });
         this.container.add(heading);
 
-        if (planning) {
-            const shooters = players.filter(
-                (player) =>
-                    !player.waitingForNextRound &&
-                    !player.roundState?.hasScored,
-            );
-            const ready = shooters.filter((player) => player.ready).length;
+        const shooters = players.filter(
+            (player) =>
+                !player.waitingForNextRound && !player.roundState?.hasScored,
+        );
+        const ready = shooters.filter((player) => player.ready).length;
 
-            const summary = addText(
-                this.scene,
-                WIDTH - PADDING,
-                y + 3,
-                `${ready} of ${shooters.length} ready`,
-                { size: TYPE.small, color: CSS.muted },
-            ).setOrigin(1, 0);
+        const summary = addText(
+            this.scene,
+            WIDTH - PADDING,
+            y + 3,
+            `${ready} of ${shooters.length} ready`,
+            { size: TYPE.small, color: CSS.muted },
+        ).setOrigin(1, 0);
 
-            this.container.add(summary);
-        }
+        this.container.add(summary);
 
         y += heading.height + 10;
 
@@ -95,9 +90,7 @@ export class PlayerPanel {
             dot.fillCircle(PADDING + DOT_RADIUS, centerY, DOT_RADIUS);
             this.container.add(dot);
 
-            const { text, color } = planning
-                ? this.getPlanningStatus(player)
-                : this.getLobbyStatus(player);
+            const { text, color } = this.getPlanningStatus(player);
 
             const status = addText(this.scene, WIDTH - PADDING, centerY, text, {
                 size: TYPE.small,
@@ -137,12 +130,6 @@ export class PlayerPanel {
                 10,
             );
         }
-    }
-
-    private getLobbyStatus(player: Player) {
-        return player.id === this.network.getHostId()
-            ? { text: "Host", color: CSS.muted }
-            : { text: "", color: CSS.muted };
     }
 
     private getPlanningStatus(player: Player) {

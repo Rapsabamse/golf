@@ -30,7 +30,6 @@ export class GameStateHandler {
     /** True while the camera shows the whole course instead of following a ball. */
     private framingCourse = false;
 
-    private lastState?: GameState;
     private finalPlayers: Player[] = [];
 
     /** The map switch scheduled after the scoreboard, if one is pending. */
@@ -53,15 +52,8 @@ export class GameStateHandler {
     ) {}
 
     handle(gamestate: GameState, data?: ServerData) {
-        // The host pressed Play again: back to hole 1 with fresh balls
-        const newGameStarted =
-            this.lastState === GameState.GAME_OVER &&
-            gamestate === GameState.PLANNING;
-        this.lastState = gamestate;
-
-        if (newGameStarted) {
-            this.startNewGame(data?.mapName ?? getBaseMap());
-        }
+        // The lobby screen replaces the course while waiting
+        this.scene.cameras.main.setVisible(gamestate !== GameState.WAITING);
 
         if (gamestate === GameState.WAITING) {
             // Game was reset: drop the scheduled switch to the next hole
@@ -118,7 +110,7 @@ export class GameStateHandler {
                 break;
         }
 
-        this.ui.updateUI(gamestate, this.network.getIsHost(), data?.shouldWait);
+        this.ui.updateUI(gamestate, data?.shouldWait);
     }
 
     private showCourseState(courseState: CourseState) {
@@ -256,15 +248,6 @@ export class GameStateHandler {
             this.network.getIsHost(),
             host?.name ?? "the host",
         );
-    }
-
-    private startNewGame(mapName: string) {
-        this.scoreboard.hide();
-        this.setScoredPlayers([]);
-
-        this.loadMap(mapName);
-        this.ballManager.updateBalls(this.network.getPlayers(), true);
-        this.playCamera();
     }
 
     /** Cancel the pending map switch, optionally doing it right away. */

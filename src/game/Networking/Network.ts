@@ -12,8 +12,18 @@ import {
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8090";
 
 export class Network {
-    private socket!: WebSocket;
+    private socket?: WebSocket;
     private playerId!: string;
+    private lobbyCode = "";
+    /** In a lobby: the server accepted our host or join request. */
+    private joined = false;
+    /**
+     * After joining, messages wait here until the game scene is listening
+     * (resume), so nothing sent while the scene starts is missed.
+     */
+    private paused = true;
+    private queue: ServerMessageData[] = [];
+    private pendingRequest?: object;
     private players: Player[] = [];
     private gameState: GameState;
     private isHost = false;
@@ -23,16 +33,62 @@ export class Network {
     onGameStateChange?: (gamestate: GameState, data?: ServerData) => void;
     onReadyConfirmed?: () => void;
 
-    connect(playerName: string) {
+    /** The server put us in a lobby. */
+    onLobbyJoined?: () => void;
+    /** Hosting or joining failed, or the server can't be reached. */
+    onLobbyError?: (error: string) => void;
+
+    /** Make a new lobby with its own code. */
+    host(playerName: string) {
+        this.request({
+            type: MessageTypeClient.HOST_LOBBY,
+            data: { name: playerName },
+        });
+    }
+
+    /** Join the lobby with this code. */
+    join(code: string, playerName: string) {
+        this.request({
+            type: MessageTypeClient.JOIN_LOBBY,
+            data: { code, name: playerName },
+        });
+    }
+
+    /** Start handling game messages (and any that arrived while paused). */
+    resume() {
+        this.paused = false;
+
+        for (const message of this.queue.splice(0)) {
+            this.handleMessage(message);
+        }
+    }
+
+    getLobbyCode() {
+        return this.lobbyCode;
+    }
+
+    /** Send a host or join request, connecting first if needed. */
+    private request(message: object) {
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.send(message);
+            return;
+        }
+
+        this.pendingRequest = message;
+
+        if (this.socket?.readyState === WebSocket.CONNECTING) {
+            return;
+        }
+
         this.socket = new WebSocket(WS_URL);
 
         this.socket.onopen = () => {
             console.log("Connected to server");
 
-            this.send({
-                type: MessageTypeClient.NAME,
-                data: playerName,
-            });
+            if (this.pendingRequest) {
+                this.send(this.pendingRequest);
+                this.pendingRequest = undefined;
+            }
         };
 
         this.socket.onmessage = (event) => {
@@ -44,6 +100,44 @@ export class Network {
                 return;
             }
 
+            if (!this.joined) {
+                this.handleLobbyMessage(message);
+            } else if (this.paused) {
+                this.queue.push(message);
+            } else {
+                this.handleMessage(message);
+            }
+        };
+
+        this.socket.onclose = () => {
+            console.log("Disconnected from server");
+
+            if (!this.joined) {
+                this.socket = undefined;
+                this.onLobbyError?.("Can't reach the game server. Is it running?");
+            }
+        };
+    }
+
+    private handleLobbyMessage(message: ServerMessageData) {
+        if (message.type === MessageTypeServer.LOBBY_ERROR) {
+            this.onLobbyError?.(message.data?.error ?? "Couldn't join that game");
+            return;
+        }
+
+        if (
+            message.type === MessageTypeServer.CONNECTED &&
+            message.data?.playerId
+        ) {
+            this.joined = true;
+            this.playerId = message.data.playerId;
+            this.lobbyCode = message.data.lobbyCode ?? "";
+            this.onLobbyJoined?.();
+        }
+    }
+
+    private handleMessage(message: ServerMessageData) {
+        {
             // Host status can move to another player when the host leaves
             if (message.data?.hostId !== undefined) {
                 this.hostId = message.data.hostId;
@@ -89,11 +183,7 @@ export class Network {
                 this.gameState = message.data.state;
                 this.onGameStateChange?.(this.gameState, message.data);
             }
-        };
-
-        this.socket.onclose = () => {
-            console.log("Disconnected from server");
-        };
+        }
     }
 
     send(message: object) {

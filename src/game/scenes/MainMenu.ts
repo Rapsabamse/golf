@@ -4,6 +4,7 @@ import { Scene } from "phaser";
 import { EventBus } from "../EventBus";
 import { getRandomName } from "../GameHelpers/MenuHelpers";
 import { Button } from "../ui/Button";
+import { Network } from "../Networking/Network";
 import { COLORS, CSS, FONTS, TYPE, addText, drawPennant } from "../ui/theme";
 import { DESIGN_HEIGHT, applyUiScale, onResize } from "../ui/layout";
 
@@ -22,12 +23,31 @@ const TURF_LIP = 0x4f8f27;
 
 const STYLE_ID = "golf-menu-style";
 
+/** Lobby codes are 4 letters. */
+const CODE_LENGTH = 4;
+/** Host and Join sit side by side under the green, as wide as it together. */
+const ROW_BUTTON_WIDTH = 220;
+const ROW_OFFSET = (PAD_WIDTH - ROW_BUTTON_WIDTH) / 2;
+
+type MenuMode = "choose" | "join";
+
 export class MainMenu extends Scene {
     private nameInput!: HTMLInputElement;
+    private codeInput!: HTMLInputElement;
+    private hostButton!: Button;
     private joinButton!: Button;
+    /** Join mode: joins the lobby with the typed code. */
+    private confirmJoinButton!: Button;
+    private backLink!: Phaser.GameObjects.Text;
+    private status!: Phaser.GameObjects.Text;
     private padTop = 0;
+    private rowY = 0;
 
-    /** Title, green and button, laid out around x = 0 at the 1280×720 design height. */
+    private mode: MenuMode = "choose";
+    private busy = false;
+    private network?: Network;
+
+    /** Title, green and buttons, laid out around x = 0 at the 1280×720 design height. */
     private menu!: Phaser.GameObjects.Container;
     private uiScale = 1;
 
@@ -36,6 +56,9 @@ export class MainMenu extends Scene {
     }
 
     create() {
+        this.mode = "choose";
+        this.busy = false;
+        this.network = undefined;
         this.menu = this.add.container(0, 0);
 
         // Title
@@ -64,17 +87,67 @@ export class MainMenu extends Scene {
             color: CSS.ink,
         }).setOrigin(0.5, 0);
 
+        this.rowY = this.padTop + PAD_HEIGHT + PAD_LIP + 60;
+
+        // Host makes a new lobby; Join asks for a code first
+        this.hostButton = new Button(
+            this,
+            -ROW_OFFSET,
+            this.rowY,
+            "Host game",
+            ROW_BUTTON_WIDTH,
+        ).setOnClick(() => this.hostGame());
+
         this.joinButton = new Button(
             this,
-            0,
-            this.padTop + PAD_HEIGHT + PAD_LIP + 60,
+            ROW_OFFSET,
+            this.rowY,
             "Join game",
-            INPUT_WIDTH,
-        ).setOnClick(() => this.changeScene());
+            ROW_BUTTON_WIDTH,
+        ).setOnClick(() => this.setMode("join"));
 
-        this.menu.add([title, tagline, pad, nameLabel, this.joinButton]);
+        // Join mode: the code field takes Host's place
+        this.confirmJoinButton = new Button(
+            this,
+            ROW_OFFSET,
+            this.rowY,
+            "Join",
+            ROW_BUTTON_WIDTH,
+        )
+            .setOnClick(() => this.joinGame())
+            .setVisible(false);
 
-        this.createNameInput();
+        this.status = addText(this, 0, this.rowY + 66, "", {
+            size: TYPE.body,
+            color: CSS.muted,
+        }).setOrigin(0.5);
+
+        this.backLink = addText(this, 0, this.rowY + 108, "Back", {
+            size: TYPE.body,
+            bold: true,
+            color: CSS.muted,
+        })
+            .setOrigin(0.5)
+            .setPadding(12, 6, 12, 6)
+            .setVisible(false)
+            .setInteractive({ useHandCursor: true })
+            .on("pointerover", () => this.backLink.setColor(CSS.text))
+            .on("pointerout", () => this.backLink.setColor(CSS.muted))
+            .on("pointerup", () => this.setMode("choose"));
+
+        this.menu.add([
+            title,
+            tagline,
+            pad,
+            nameLabel,
+            this.hostButton,
+            this.joinButton,
+            this.confirmJoinButton,
+            this.status,
+            this.backLink,
+        ]);
+
+        this.createInputs();
 
         this.layout();
         onResize(this, () => this.layout());
@@ -89,17 +162,96 @@ export class MainMenu extends Scene {
 
         this.menu.setPosition(width / 2, (height - DESIGN_HEIGHT) / 2);
 
-        this.positionNameInput();
+        this.positionInput(this.nameInput, 0, this.padTop + 108, INPUT_WIDTH);
+        this.positionInput(
+            this.codeInput,
+            -ROW_OFFSET,
+            this.rowY - 2,
+            ROW_BUTTON_WIDTH,
+        );
     }
 
-    changeScene() {
-        const name = this.nameInput.value.trim() || this.nameInput.placeholder;
+    /** Choosing between Host and Join, or typing a code to join. */
+    private setMode(mode: MenuMode) {
+        if (this.busy) {
+            return;
+        }
 
-        this.removeNameInput();
+        this.mode = mode;
+        const joining = mode === "join";
 
-        this.scene.start("Game", {
-            playerName: name,
-        });
+        this.hostButton.setVisible(!joining);
+        this.joinButton.setVisible(!joining);
+        this.confirmJoinButton.setVisible(joining);
+        this.backLink.setVisible(joining);
+        this.codeInput.style.display = joining ? "block" : "none";
+
+        this.showStatus("");
+
+        if (joining) {
+            this.codeInput.focus();
+        } else {
+            this.codeInput.value = "";
+        }
+    }
+
+    private showStatus(text: string, isError = false) {
+        this.status.setText(text).setColor(isError ? CSS.error : CSS.muted);
+    }
+
+    private setBusy(busy: boolean) {
+        this.busy = busy;
+        this.hostButton.setEnabled(!busy);
+        this.joinButton.setEnabled(!busy);
+        this.confirmJoinButton.setEnabled(!busy);
+        this.nameInput.disabled = busy;
+        this.codeInput.disabled = busy;
+    }
+
+    private getName() {
+        return this.nameInput.value.trim() || this.nameInput.placeholder;
+    }
+
+    private hostGame() {
+        this.showStatus("Making your game…");
+        this.connect().host(this.getName());
+    }
+
+    private joinGame() {
+        const code = this.codeInput.value;
+
+        if (code.length !== CODE_LENGTH) {
+            this.showStatus("Codes are 4 letters, like XKLI.", true);
+            this.codeInput.focus();
+            return;
+        }
+
+        this.showStatus(`Joining ${code}…`);
+        this.connect().join(code, this.getName());
+    }
+
+    /** One connection for the menu, kept if a code is wrong so you can try again. */
+    private connect() {
+        this.setBusy(true);
+
+        const network = (this.network ??= new Network());
+
+        network.onLobbyJoined = () => {
+            this.removeInputs();
+            this.scene.start("Game", { network });
+        };
+
+        network.onLobbyError = (error) => {
+            this.setBusy(false);
+            this.showStatus(error, true);
+
+            if (this.mode === "join") {
+                this.codeInput.select();
+                this.codeInput.focus();
+            }
+        };
+
+        return network;
     }
 
     /** Raised turf with mown stripes, and the hole with its flag in the corner. */
@@ -133,38 +285,89 @@ export class MainMenu extends Scene {
         return pad;
     }
 
-    private createNameInput() {
+    private createInputs() {
         this.injectInputStyle();
 
-        this.nameInput = document.createElement("input");
-        this.nameInput.type = "text";
-        this.nameInput.className = "golf-name-input";
-        this.nameInput.placeholder = getRandomName();
-        this.nameInput.maxLength = 16;
-        this.nameInput.setAttribute("aria-label", "Your name");
-
+        this.nameInput = this.createInput("golf-name-input", getRandomName(), 16, "Your name");
         this.nameInput.addEventListener("keydown", (event) => {
-            if (event.key === "Enter") {
-                this.joinButton.trigger();
+            if (event.key !== "Enter") {
+                return;
+            }
+
+            if (this.mode === "join") {
+                this.codeInput.focus();
+            } else {
+                this.hostButton.trigger();
             }
         });
 
-        document.body.appendChild(this.nameInput);
+        this.codeInput = this.createInput(
+            "golf-name-input golf-code-input",
+            "CODE",
+            CODE_LENGTH,
+            "Game code",
+        );
+        this.codeInput.autocomplete = "off";
+        this.codeInput.spellcheck = false;
+        this.codeInput.style.display = "none";
+
+        // Codes are capital letters only, however they're typed or pasted
+        this.codeInput.addEventListener("input", () => {
+            this.codeInput.value = this.codeInput.value
+                .toUpperCase()
+                .replace(/[^A-Z]/g, "")
+                .slice(0, CODE_LENGTH);
+        });
+
+        this.codeInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                this.confirmJoinButton.trigger();
+            } else if (event.key === "Escape") {
+                this.setMode("choose");
+                this.nameInput.focus();
+            }
+        });
 
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () =>
-            this.removeNameInput(),
+            this.removeInputs(),
         );
 
         this.nameInput.focus();
     }
 
-    private removeNameInput() {
-        this.nameInput?.remove();
+    private createInput(
+        className: string,
+        placeholder: string,
+        maxLength: number,
+        label: string,
+    ) {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = className;
+        input.placeholder = placeholder;
+        input.maxLength = maxLength;
+        input.setAttribute("aria-label", label);
+
+        document.body.appendChild(input);
+        return input;
     }
 
-    /** Keep the HTML field over the green, wherever the canvas sits and however it is scaled. */
-    private positionNameInput() {
-        if (!this.nameInput) {
+    private removeInputs() {
+        this.nameInput?.remove();
+        this.codeInput?.remove();
+    }
+
+    /**
+     * Keep an HTML field over the canvas at (x, y) in menu units, wherever
+     * the canvas sits and however it is scaled.
+     */
+    private positionInput(
+        input: HTMLInputElement | undefined,
+        x: number,
+        y: number,
+        width: number,
+    ) {
+        if (!input) {
             return;
         }
 
@@ -172,17 +375,10 @@ export class MainMenu extends Scene {
         // Interface units to CSS pixels
         const toCss = this.uiScale * (bounds.width / this.scale.width);
 
-        const centerX =
-            bounds.left + window.scrollX + this.menu.x * toCss;
-        const centerY =
-            bounds.top +
-            window.scrollY +
-            (this.menu.y + this.padTop + 108) * toCss;
-
-        Object.assign(this.nameInput.style, {
-            left: `${centerX}px`,
-            top: `${centerY}px`,
-            width: `${INPUT_WIDTH * toCss}px`,
+        Object.assign(input.style, {
+            left: `${bounds.left + window.scrollX + (this.menu.x + x) * toCss}px`,
+            top: `${bounds.top + window.scrollY + (this.menu.y + y) * toCss}px`,
+            width: `${width * toCss}px`,
             height: `${INPUT_HEIGHT * toCss}px`,
             fontSize: `${22 * toCss}px`,
             borderRadius: `${14 * toCss}px`,
@@ -214,6 +410,16 @@ export class MainMenu extends Scene {
             .golf-name-input::placeholder {
                 color: #6b7a63;
                 font-family: ${FONTS.regular};
+            }
+            .golf-code-input {
+                letter-spacing: 0.3em;
+                text-indent: 0.3em;
+            }
+            .golf-code-input::placeholder {
+                letter-spacing: 0.15em;
+            }
+            .golf-name-input:disabled {
+                opacity: 0.7;
             }
             .golf-name-input:focus-visible {
                 box-shadow: 0 4px 0 #3f7a1f, 0 0 0 3px #121a35;

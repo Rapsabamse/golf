@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 import { GameState, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 import { PlayerPanel } from "./PlayerPanel";
+import { LobbyScreen } from "./LobbyScreen";
 import { PowerBar } from "./PowerBar";
 import { Button } from "../ui/Button";
 import {
@@ -19,11 +20,15 @@ const CARD_WIDTH = 380;
 const CARD_PADDING = 22;
 const TAG_HEIGHT = 30;
 const TOAST_DURATION_MS = 2200;
+const CODE_BOX_PADDING_X = 16;
+const CODE_BOX_PADDING_Y = 10;
 
 interface StatusCopy {
     title: string;
-    body: string;
-    action?: "start" | "lockIn";
+    /** Only for something you can't tell from the screen, like who we're waiting for. */
+    body?: string;
+    /** lockedIn: the Lock in button stays, greyed out, until everyone's in. */
+    action?: "start" | "lockIn" | "lockedIn";
 }
 
 /**
@@ -48,6 +53,10 @@ export class GameUI {
     private toastTimer?: Phaser.Time.TimerEvent;
 
     private controls!: Phaser.GameObjects.Container;
+    /** The room code, bottom-right, so friends can join at any time. */
+    private codeBox!: Phaser.GameObjects.Container;
+    /** Shown instead of the course while waiting to start. */
+    private lobbyScreen!: LobbyScreen;
 
     private playerPanel!: PlayerPanel;
     private powerBar!: PowerBar;
@@ -125,11 +134,13 @@ export class GameUI {
         this.powerBar = new PowerBar(this.scene, width / 2, height - MARGIN - 100);
 
         this.createControls();
+        this.createCodeBox();
+        this.lobbyScreen = new LobbyScreen(this.scene, this.network);
 
         this.playerPanel = new PlayerPanel(this.scene, this.network);
     }
 
-    updateUI(gameState: GameState, isHost?: boolean, shouldWait?: boolean) {
+    updateUI(gameState: GameState, shouldWait?: boolean) {
         if (gameState !== GameState.PLANNING) {
             this.isReady = false;
         }
@@ -137,7 +148,12 @@ export class GameUI {
         this.lastState = gameState;
         this.lastShouldWait = !!shouldWait;
 
-        const copy = this.getStatusCopy(gameState, !!isHost, !!shouldWait);
+        // The lobby has a screen of its own; everything else is for holes
+        const inLobby = gameState === GameState.WAITING;
+        this.lobbyScreen.setVisible(inLobby);
+        this.codeBox.setVisible(!inLobby && this.network.getLobbyCode() !== "");
+
+        const copy = this.getStatusCopy(gameState, !!shouldWait);
 
         if (copy) {
             this.showCard(copy);
@@ -153,6 +169,7 @@ export class GameUI {
     /** Redraw the parts that show the sound setting. */
     refreshPlayerPanel(gameState: GameState) {
         this.playerPanel.update(gameState);
+        this.lobbyScreen.update();
         this.updateControls();
     }
 
@@ -162,11 +179,7 @@ export class GameUI {
 
     setReady() {
         this.isReady = true;
-        this.updateUI(
-            this.lastState,
-            this.network.getIsHost(),
-            this.lastShouldWait,
-        );
+        this.updateUI(this.lastState, this.lastShouldWait);
     }
 
     /** Short message above the action button that fades by itself. */
@@ -218,6 +231,39 @@ export class GameUI {
         this.powerBar.setCenter(width / 2, height - MARGIN - 100);
         this.controls.setPosition(MARGIN, height - MARGIN);
         this.playerPanel.setScreenWidth(width);
+        this.codeBox.setPosition(
+            width - MARGIN - this.codeBox.width,
+            height - MARGIN - this.codeBox.height,
+        );
+        this.lobbyScreen.layout(width, height);
+    }
+
+    /** A small box with the room code; layout() keeps it in the corner. */
+    private createCodeBox() {
+        const label = addText(this.scene, CODE_BOX_PADDING_X, CODE_BOX_PADDING_Y, "Room code", {
+            size: TYPE.small,
+            color: CSS.muted,
+        });
+
+        const code = addText(
+            this.scene,
+            CODE_BOX_PADDING_X,
+            label.y + label.height + 2,
+            this.network.getLobbyCode(),
+            { size: TYPE.label, bold: true },
+        ).setLetterSpacing(4);
+
+        const width =
+            Math.max(label.width, code.width) + CODE_BOX_PADDING_X * 2;
+        const height = code.y + code.height + CODE_BOX_PADDING_Y;
+
+        const background = this.scene.add.graphics();
+        drawPanel(background, 0, 0, width, height, 12);
+
+        this.codeBox = this.scene.add
+            .container(0, 0, [background, label, code])
+            .setSize(width, height)
+            .setVisible(this.network.getLobbyCode() !== "");
     }
 
     /** Show the charge while aiming (0..1), or hide the bar with undefined. */
@@ -227,12 +273,15 @@ export class GameUI {
 
     /** Run the main action (Enter key). */
     triggerAction() {
-        this.actionButton.trigger();
+        if (this.lobbyScreen.visible) {
+            this.lobbyScreen.trigger();
+        } else {
+            this.actionButton.trigger();
+        }
     }
 
     private getStatusCopy(
         gameState: GameState,
-        isHost: boolean,
         shouldWait: boolean,
     ): StatusCopy | undefined {
         const players = this.network.getPlayers();
@@ -247,32 +296,14 @@ export class GameUI {
         ) {
             return {
                 title: "Hole in progress",
-                body: "You'll tee off on the next hole. Watch how the others play this one.",
+                body: "You'll tee off on the next hole.",
             };
         }
 
         switch (gameState) {
-            case GameState.WAITING: {
-                if (!isHost) {
-                    const host = players.find(
-                        (player) => player.id === this.network.getHostId(),
-                    );
-
-                    return {
-                        title: "Lobby",
-                        body: `Waiting for ${host?.name ?? "the host"} to start the game.`,
-                    };
-                }
-
-                return {
-                    title: "Lobby",
-                    body:
-                        others.length === 0
-                            ? "Just you so far. Start when your friends have joined."
-                            : `${players.length} players here. Start when everyone has joined.`,
-                    action: "start",
-                };
-            }
+            // The lobby screen covers this
+            case GameState.WAITING:
+                return undefined;
 
             case GameState.PLANNING: {
                 const shots = self?.roundState?.shots ?? 0;
@@ -288,7 +319,7 @@ export class GameUI {
                         title: `Holed in ${shots}`,
                         body: unfinished.length
                             ? `Waiting for ${joinNames(unfinished)} to finish the hole.`
-                            : "Nice. The hole is wrapping up.",
+                            : undefined,
                     };
                 }
 
@@ -298,18 +329,15 @@ export class GameUI {
                         .map((player) => player.name);
 
                     return {
-                        title: "Shot locked in",
+                        title: `Shot ${shots + 1}`,
+                        action: "lockedIn",
                         body: aiming.length
                             ? `Waiting for ${joinNames(aiming)} to lock in.`
-                            : "Everyone's in. Here we go.",
+                            : undefined,
                     };
                 }
 
-                return {
-                    title: `Shot ${shots + 1}`,
-                    body: "Drag back from your ball to aim, then lock in your shot.",
-                    action: "lockIn",
-                };
+                return { title: `Shot ${shots + 1}`, action: "lockIn" };
             }
 
             // The course and the scoreboard speak for themselves here
@@ -358,14 +386,26 @@ export class GameUI {
         }
 
         this.title.setText(title).setPosition(CARD_PADDING, y);
-        y += this.title.height + 6;
+        y += this.title.height;
 
-        this.body.setText(body).setPosition(CARD_PADDING, y);
-        y += this.body.height + CARD_PADDING;
+        // Most cards are just a title
+        this.body.setVisible(body !== undefined);
+
+        if (body !== undefined) {
+            this.body.setText(body).setPosition(CARD_PADDING, y + 6);
+            y += 6 + this.body.height;
+        }
+
+        y += CARD_PADDING;
 
         const cardWidth = Math.min(
             CARD_WIDTH,
-            Math.max(this.title.width, this.body.width, tagWidth, 220) +
+            Math.max(
+                this.title.width,
+                body !== undefined ? this.body.width : 0,
+                tagWidth,
+                160,
+            ) +
                 CARD_PADDING * 2,
         );
 
@@ -384,11 +424,15 @@ export class GameUI {
         if (action === "start") {
             this.actionButton
                 .setText("Start game")
+                .setEnabled(true)
                 .setOnClick(() => this.network.startGame());
-        } else {
+        } else if (action === "lockIn") {
             this.actionButton
                 .setText("Lock in shot")
+                .setEnabled(true)
                 .setOnClick(() => this.lockIn());
+        } else {
+            this.actionButton.setText("Shot locked in").setEnabled(false);
         }
 
         this.actionButton.setVisible(true);
@@ -402,16 +446,23 @@ export class GameUI {
     private updateControls() {
         this.controls.removeAll(true);
 
+        const inLobby = this.lastState === GameState.WAITING;
         const hints: [string, string][] = [
             ["M", this.isMuted() ? "Sound off" : "Sound on"],
-            ["Scroll", "Zoom"],
         ];
 
-        if (this.actionButton.visible) {
-            hints.push([
-                "Enter",
-                this.lastState === GameState.WAITING ? "Start" : "Lock in",
-            ]);
+        // There's no course to zoom in the lobby
+        if (!inLobby) {
+            hints.push(["Scroll", "Zoom"]);
+        }
+
+        if (inLobby) {
+            if (this.network.getIsHost()) {
+                hints.push(["Enter", "Start"]);
+            }
+        } else if (this.actionButton.visible && this.actionButton.isEnabled()) {
+            // No Enter hint while the button is greyed out
+            hints.push(["Enter", "Lock in"]);
         } else if (
             this.lastState === GameState.GAME_OVER &&
             this.network.getIsHost()

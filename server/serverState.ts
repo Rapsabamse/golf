@@ -11,6 +11,8 @@ export interface SimulationReport {
  * handlers can read and change it without a long list of getters and setters.
  */
 export interface ServerContext {
+    /** The 4-letter code players join this lobby with. */
+    code: string;
     players: Map<string, Player>;
     gameState: GameState;
     hostId: string | undefined;
@@ -33,8 +35,9 @@ export interface ServerContext {
     holeMaxShots: number[];
 }
 
-export function createServerContext(): ServerContext {
+export function createServerContext(code = ""): ServerContext {
     return {
+        code,
         players: new Map(),
         gameState: GameState.WAITING,
         hostId: undefined,

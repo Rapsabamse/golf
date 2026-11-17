@@ -24,6 +24,10 @@ export enum MessageTypeClient {
     NAME,
     /** Host starts a new game from the final scores. */
     PLAY_AGAIN,
+    /** First message: make a new lobby. Data: { name }. */
+    HOST_LOBBY,
+    /** First message: join a lobby. Data: { code, name }. */
+    JOIN_LOBBY,
 }
 
 export enum MessageTypeServer {
@@ -31,6 +35,8 @@ export enum MessageTypeServer {
     CONNECTED,
     GAME_STATE,
     SHOT_SELECTION_CONFIRMATION,
+    /** Couldn't host or join. Data: { error }. */
+    LOBBY_ERROR,
 }
 
 export enum GameState {
@@ -102,6 +108,10 @@ export interface ServerData {
     mapName?: string;
     /** Hole number (1-based) that goes with mapName. */
     hole?: number;
+    /** The lobby's code, sent with GAME_STATE. */
+    lobbyCode?: string;
+    /** Why hosting or joining failed (LOBBY_ERROR). */
+    error?: string;
     /** Sent to someone joining a game in progress, so they can watch it. */
     courseState?: CourseState;
 }

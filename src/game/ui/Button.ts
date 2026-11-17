@@ -95,6 +95,10 @@ export class Button extends Phaser.GameObjects.Container {
         return this;
     }
 
+    isEnabled() {
+        return this.enabled;
+    }
+
     /** Run the click action from the keyboard, with the same pressed look. */
     trigger() {
         if (!this.visible || !this.enabled) {

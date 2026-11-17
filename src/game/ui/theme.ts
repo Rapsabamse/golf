@@ -24,6 +24,8 @@ export const CSS = {
     muted: "#8e9ac0",
     fairway: "#8fd14f",
     ink: "#10260a",
+    /** Something went wrong (a wrong lobby code, no server). */
+    error: "#ff9585",
 };
 
 /** Loaded in the Preloader from public/assets/fonts. */

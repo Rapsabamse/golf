@@ -19,6 +19,7 @@ export function handleConnection(
     socket: WebSocket,
     playerId: string,
     ctx: ServerContext,
+    name = "Player",
 ) {
     const shouldWait = ctx.gameState !== GameState.WAITING;
 
@@ -27,7 +28,7 @@ export function handleConnection(
         socket,
         state: { points: [] },
         waitingForNextRound: shouldWait,
-        name: "Player",
+        name,
         color: pickColor(ctx),
     };
 
@@ -56,7 +57,7 @@ export function handleConnection(
     socket.send(
         JSON.stringify({
             type: MessageTypeServer.CONNECTED,
-            data: { playerId: playerId },
+            data: { playerId: playerId, lobbyCode: ctx.code },
         }),
     );
 
@@ -85,6 +86,7 @@ export function handleConnection(
                 shouldWait,
                 mapName: getCurrentMapName(ctx),
                 hole: ctx.holeIndex + 1,
+                lobbyCode: ctx.code,
                 courseState,
                 // Joining on the final scores: show them too
                 playerList: gameOver ? getPlayersList(ctx.players) : undefined,

@@ -15,6 +15,7 @@ import {
     finishMapLoad,
     finishSimulation,
     startGame,
+    resetGame,
     tryStartSimulation,
 } from "../gameLogic";
 
@@ -72,9 +73,10 @@ export function handleMessages(
         // The host starts a new game from the final scores, with everyone
         // who is connected (including anyone who joined in the meantime)
         case MessageTypeClient.PLAY_AGAIN:
+            // Everyone goes back to the lobby together, to start again from there
             if (ctx.gameState === GameState.GAME_OVER && isHost) {
-                console.log("Host started a new game");
-                startGame(ctx);
+                console.log("Host took everyone back to the lobby");
+                resetGame(ctx);
             }
             break;
 

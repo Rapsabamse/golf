@@ -39,11 +39,12 @@ export class Game extends Phaser.Scene {
         super("Game");
     }
 
-    create(data: { playerName: string }) {
+    /** The menu hosts or joins a lobby, then hands over its connection. */
+    create(data: { network: Network }) {
         this.camera = this.cameras.main;
         this.camera.setZoom(getWorldZoom(this, PLAY_ZOOM));
 
-        this.network = new Network();
+        this.network = data.network;
 
         // Create map
         const mapLoader = new TiledMapLoader();
@@ -78,7 +79,8 @@ export class Game extends Phaser.Scene {
 
         hud.events.once(Phaser.Scenes.Events.CREATE, () => {
             this.createInterface(hud);
-            this.network.connect(data.playerName);
+            // Everything is listening now: handle the lobby's messages
+            this.network.resume();
         });
 
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -205,7 +207,6 @@ export class Game extends Phaser.Scene {
 
             this.ui.updateUI(
                 this.network.getGameState(),
-                this.network.getIsHost(),
                 self?.waitingForNextRound,
             );
         };
@@ -250,7 +251,7 @@ export class Game extends Phaser.Scene {
     lockIn() {
         // Locking in without aiming would waste a stroke
         if (!this.aimController.hasSelectedShot()) {
-            this.ui.showHint("Aim first: drag back from your ball");
+            this.ui.showHint("Aim first");
             return;
         }
 
