@@ -8,6 +8,10 @@ import {
     BallLocation,
     Vector,
 } from "../../../server/types/types";
+import { RejoinStore, SavedSession } from "./RejoinStore";
+
+/** How often the saved rejoin key is marked as recent while connected. */
+const KEEP_SESSION_MS = 5000;
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8090";
 
@@ -28,6 +32,11 @@ export class Network {
     private gameState: GameState;
     private isHost = false;
     private hostId?: string;
+    /** Saved games still to try when rejoining, after the current attempt. */
+    private rejoinQueue?: SavedSession[];
+    private rejoinAttempt?: SavedSession;
+    private rejoinEnded = false;
+    private keepSessionTimer?: ReturnType<typeof setInterval>;
 
     onPlayerList?: (players: Player[], self: Player | undefined) => void;
     onGameStateChange?: (gamestate: GameState, data?: ServerData) => void;
@@ -37,6 +46,10 @@ export class Network {
     onLobbyJoined?: () => void;
     /** Hosting or joining failed, or the server can't be reached. */
     onLobbyError?: (error: string) => void;
+    /** Rejoining didn't work; ended is true if the game had ended. */
+    onRejoinFailed?: (ended: boolean) => void;
+    /** The connection dropped mid-game. */
+    onConnectionLost?: () => void;
 
     /** Make a new lobby with its own code. An empty catchphrase gets a random one. */
     host(playerName: string, catchphrase: string) {
@@ -51,6 +64,32 @@ export class Network {
         this.request({
             type: MessageTypeClient.JOIN_LOBBY,
             data: { code, name: playerName, catchphrase },
+        });
+    }
+
+    /**
+     * Rejoin a game this browser was in (after a refresh or a closed tab),
+     * trying each saved one in turn.
+     */
+    rejoin(sessions: SavedSession[]) {
+        this.rejoinQueue = [...sessions];
+        this.rejoinEnded = false;
+        this.tryNextRejoin();
+    }
+
+    private tryNextRejoin() {
+        const next = this.rejoinQueue?.shift();
+        this.rejoinAttempt = next;
+
+        if (!next) {
+            this.rejoinQueue = undefined;
+            this.onRejoinFailed?.(this.rejoinEnded);
+            return;
+        }
+
+        this.request({
+            type: MessageTypeClient.REJOIN_LOBBY,
+            data: { code: next.code, token: next.token, takeover: next.takeover },
         });
     }
 
@@ -111,16 +150,54 @@ export class Network {
 
         this.socket.onclose = () => {
             console.log("Disconnected from server");
+            clearInterval(this.keepSessionTimer);
 
-            if (!this.joined) {
-                this.socket = undefined;
-                this.onLobbyError?.("Can't reach the game server. Is it running?");
+            if (this.joined) {
+                this.onConnectionLost?.();
+                return;
             }
+
+            this.socket = undefined;
+
+            if (this.rejoinQueue) {
+                this.rejoinQueue = undefined;
+                this.onRejoinFailed?.(false);
+                return;
+            }
+
+            this.onLobbyError?.("Can't reach the game server. Is it running?");
         };
+    }
+
+    /**
+     * Keep the key to rejoin as this player if the page is refreshed or
+     * closed, marked as recent for as long as we're connected.
+     */
+    private rememberSession(token?: string) {
+        if (!token) {
+            return;
+        }
+
+        const save = () => RejoinStore.save(this.lobbyCode, token);
+        save();
+
+        clearInterval(this.keepSessionTimer);
+        this.keepSessionTimer = setInterval(save, KEEP_SESSION_MS);
+        window.addEventListener("pagehide", save);
     }
 
     private handleLobbyMessage(message: ServerMessageData) {
         if (message.type === MessageTypeServer.LOBBY_ERROR) {
+            // Rejoining: that saved game is no good, try the next one
+            if (this.rejoinQueue) {
+                if (this.rejoinAttempt) {
+                    RejoinStore.forget(this.rejoinAttempt.token);
+                }
+                this.rejoinEnded ||= message.data?.error === "That game has ended";
+                this.tryNextRejoin();
+                return;
+            }
+
             this.onLobbyError?.(message.data?.error ?? "Couldn't join that game");
             return;
         }
@@ -130,8 +207,10 @@ export class Network {
             message.data?.playerId
         ) {
             this.joined = true;
+            this.rejoinQueue = undefined;
             this.playerId = message.data.playerId;
             this.lobbyCode = message.data.lobbyCode ?? "";
+            this.rememberSession(message.data.rejoinToken);
             this.onLobbyJoined?.();
         }
     }

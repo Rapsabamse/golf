@@ -56,9 +56,12 @@ export class PlayerPanel {
         });
         this.container.add(heading);
 
+        // Only players who are here can lock in
         const shooters = players.filter(
             (player) =>
-                !player.waitingForNextRound && !player.roundState?.hasScored,
+                !player.waitingForNextRound &&
+                !player.roundState?.hasScored &&
+                player.connected !== false,
         );
         const ready = shooters.filter((player) => player.ready).length;
 
@@ -133,6 +136,11 @@ export class PlayerPanel {
     }
 
     private getPlanningStatus(player: Player) {
+        // Their connection dropped; their place is held for them
+        if (player.connected === false) {
+            return { text: "Reconnecting", color: CSS.muted };
+        }
+
         if (player.waitingForNextRound) {
             return { text: "Next hole", color: CSS.muted };
         }

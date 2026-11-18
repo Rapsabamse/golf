@@ -166,14 +166,22 @@ export class LobbyScreen {
             background.fillStyle(player.color ?? 0xffffff, 1);
             background.fillCircle(rowLeft + DOT_RADIUS, centerY, DOT_RADIUS);
 
+            // Reconnecting says more than Host while someone's away
+            const tagText =
+                player.connected === false
+                    ? "Reconnecting"
+                    : player.id === hostId
+                      ? "Host"
+                      : undefined;
+
             const tag =
-                player.id === hostId
+                tagText !== undefined
                     ? add(
                           addText(
                               this.scene,
                               rowLeft + COLUMN_WIDTH,
                               centerY,
-                              "Host",
+                              tagText,
                               { size: TYPE.small, color: CSS.muted },
                           ).setOrigin(1, 0.5),
                       )

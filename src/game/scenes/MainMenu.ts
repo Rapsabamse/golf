@@ -8,6 +8,7 @@ import {
 } from "../GameHelpers/MenuHelpers";
 import { Button } from "../ui/Button";
 import { Network } from "../Networking/Network";
+import { RejoinStore } from "../Networking/RejoinStore";
 import { COLORS, CSS, FONTS, TYPE, addText, drawPennant } from "../ui/theme";
 import { DESIGN_HEIGHT, applyUiScale, onResize } from "../ui/layout";
 
@@ -170,7 +171,29 @@ export class MainMenu extends Scene {
         this.layout();
         onResize(this, () => this.layout());
 
+        // Back after a refresh or a closed tab: pick the game up again
+        this.rejoinSavedGame();
+
         EventBus.emit("current-scene-ready", this);
+    }
+
+    private rejoinSavedGame() {
+        const saved = RejoinStore.candidates();
+
+        if (saved.length === 0) {
+            return;
+        }
+
+        this.showStatus(`Rejoining ${saved[0].code}…`);
+
+        const network = this.connect();
+
+        network.onRejoinFailed = (ended) => {
+            this.setBusy(false);
+            this.showStatus(ended ? "Your last game has ended." : "");
+        };
+
+        network.rejoin(saved);
     }
 
     /** Keep the menu centred at any size (the sky is the Backdrop scene). */

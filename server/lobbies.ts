@@ -36,6 +36,11 @@ export function findLobby(code: string): ServerContext | undefined {
 /** Closes a lobby once its last player has left. */
 export function removeLobbyIfEmpty(lobby: ServerContext) {
     if (lobby.players.size === 0 && lobbies.get(lobby.code) === lobby) {
+        // No timer may fire for a lobby that no longer exists
+        if (lobby.shotClockTimer) {
+            clearTimeout(lobby.shotClockTimer);
+        }
+
         lobbies.delete(lobby.code);
         console.log(`Lobby ${lobby.code} closed (${lobbies.size} running)`);
     }

@@ -20,6 +20,8 @@ const CARD_WIDTH = 380;
 const CARD_PADDING = 22;
 const TAG_HEIGHT = 30;
 const TOAST_DURATION_MS = 2200;
+/** The shot clock turns red (and ticks, if you still have to lock in) from here. */
+const CLOCK_URGENT_SECONDS = 5;
 const CODE_BOX_PADDING_X = 16;
 const CODE_BOX_PADDING_Y = 10;
 
@@ -63,6 +65,12 @@ export class GameUI {
 
     /** True once the server has confirmed our locked-in shot this phase. */
     private isReady = false;
+    /** Shot clock: where it's drawn, and when it runs out (scene time). */
+    private shotClockText!: Phaser.GameObjects.Text;
+    private shotClockEndsAt?: number;
+    private lastClockSecond?: number;
+    /** Plays a tick in the last seconds, while you still have to lock in. */
+    onClockTick?: () => void;
     private hole?: number;
     private lastState: GameState = GameState.WAITING;
     private lastShouldWait = false;
@@ -102,13 +110,23 @@ export class GameUI {
             lineSpacing: 4,
         });
 
+        this.shotClockText = addText(this.scene, 0, 0, "", {
+            size: TYPE.label,
+            bold: true,
+            color: CSS.muted,
+        })
+            .setOrigin(1, 0.5)
+            .setVisible(false);
+
         this.card = this.scene.add.container(MARGIN, MARGIN, [
             this.cardBackground,
             this.holeTag,
             this.holeTagText,
             this.title,
             this.body,
+            this.shotClockText,
         ]);
+
 
         // Main action
         this.actionButton = new Button(
@@ -183,6 +201,68 @@ export class GameUI {
     }
 
     /** Short message above the action button that fades by itself. */
+    /**
+     * Time left to lock in this shot (undefined: no clock, e.g. between
+     * shots). Kept as a deadline on our own clock, then counted down here.
+     */
+    setShotClock(ms?: number) {
+        this.shotClockEndsAt =
+            ms === undefined ? undefined : this.scene.time.now + ms;
+        this.lastClockSecond = undefined;
+        this.updateShotClock();
+    }
+
+    /** Call every frame: counts the shot clock down between server updates. */
+    update() {
+        this.updateShotClock();
+    }
+
+    private updateShotClock() {
+        const endsAt = this.shotClockEndsAt;
+        const show =
+            endsAt !== undefined &&
+            this.lastState === GameState.PLANNING &&
+            this.card.visible;
+
+        this.shotClockText.setVisible(show);
+        if (!show) {
+            return;
+        }
+
+        const seconds = Math.max(
+            0,
+            Math.ceil((endsAt - this.scene.time.now) / 1000),
+        );
+
+        // Redrawing text is slow: only when the second changes
+        if (seconds === this.lastClockSecond) {
+            return;
+        }
+
+        const urgent = seconds <= CLOCK_URGENT_SECONDS;
+
+        this.shotClockText
+            .setText(`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`)
+            .setColor(urgent ? CSS.error : CSS.muted);
+
+        // Tick each second at the end, but only if you still have to act
+        const mustShoot =
+            !this.isReady && !this.haveIScored() && !this.lastShouldWait;
+
+        if (urgent && seconds > 0 && mustShoot) {
+            this.onClockTick?.();
+        }
+
+        this.lastClockSecond = seconds;
+    }
+
+    /** The connection dropped: say how to get back in, until the page is reloaded. */
+    showConnectionLost() {
+        this.showHint("Connection lost. Refresh the page to rejoin.");
+        this.toastTimer?.remove();
+        this.toastTimer = undefined;
+    }
+
     showHint(text: string) {
         this.toastText.setText(text);
 
@@ -398,15 +478,23 @@ export class GameUI {
 
         y += CARD_PADDING;
 
+        // Room for the shot clock beside the hole tag
+        const clockRoom = showTag ? tagWidth + 16 + this.clockWidth() : 0;
+
         const cardWidth = Math.min(
             CARD_WIDTH,
             Math.max(
                 this.title.width,
                 body !== undefined ? this.body.width : 0,
-                tagWidth,
+                clockRoom,
                 160,
             ) +
                 CARD_PADDING * 2,
+        );
+
+        this.shotClockText.setPosition(
+            cardWidth - CARD_PADDING,
+            CARD_PADDING + TAG_HEIGHT / 2 + 1,
         );
 
         this.cardBackground.clear();
@@ -415,7 +503,15 @@ export class GameUI {
         this.card.setVisible(true);
     }
 
-    private updateActionButton(action?: StatusCopy["action"]) {
+    /** Widest the clock gets, so the card doesn't change size as it counts. */
+    private clockWidth() {
+        const text = this.shotClockText.text;
+        const width = this.shotClockText.setText("0:00").width;
+        this.shotClockText.setText(text);
+        return width;
+    }
+
+        private updateActionButton(action?: StatusCopy["action"]) {
         if (!action) {
             this.actionButton.setVisible(false);
             return;

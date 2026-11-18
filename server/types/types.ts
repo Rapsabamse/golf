@@ -14,6 +14,15 @@ export const MAPS = ["map1", "map2", "map3", "map4", "map5"];
  */
 export const MAX_SHOT_SPEED = 40;
 
+/** Time to aim and lock in each shot. */
+export const SHOT_CLOCK_MS = 30_000;
+
+/**
+ * How long a player's place is kept after their connection drops (a refresh
+ * or a closed tab), so they can come back as themselves.
+ */
+export const REJOIN_GRACE_MS = 120_000;
+
 export enum MessageTypeClient {
     START_GAME,
     READY,
@@ -28,6 +37,11 @@ export enum MessageTypeClient {
     HOST_LOBBY,
     /** First message: join a lobby. Data: { code, name, catchphrase? }. */
     JOIN_LOBBY,
+    /**
+     * First message: come back after a refresh. Data: { code, token,
+     * takeover? }; takeover (the same tab) may replace a live connection.
+     */
+    REJOIN_LOBBY,
 }
 
 export enum MessageTypeServer {
@@ -64,6 +78,12 @@ export interface Player {
     /** Has locked in a shot this planning phase. */
     ready?: boolean;
     socket?: WebSocket;
+    /** False while their connection is gone and their place is held for them. */
+    connected?: boolean;
+    /** Server only: the secret that lets this player rejoin as themselves. */
+    rejoinToken?: string;
+    /** Server only: removes the player if they don't come back in time. */
+    removeTimer?: ReturnType<typeof setTimeout>;
     state?: PlayerState;
     roundState?: RoundState;
     shot?: PlayerShot;
@@ -114,6 +134,13 @@ export interface ServerData {
     lobbyCode?: string;
     /** Why hosting or joining failed (LOBBY_ERROR). */
     error?: string;
+    /** Sent with CONNECTED: keep it to rejoin after a refresh. */
+    rejoinToken?: string;
+    /**
+     * Time left to lock in this shot, sent with PLANNING. (Time left rather
+     * than a clock time, so it doesn't matter if the clocks disagree.)
+     */
+    shotClockMs?: number;
     /** Sent to someone joining a game in progress, so they can watch it. */
     courseState?: CourseState;
 }

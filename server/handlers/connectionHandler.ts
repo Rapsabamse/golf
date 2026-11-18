@@ -1,12 +1,17 @@
+import { randomUUID } from "crypto";
 import { ServerContext } from "../serverState";
 import {
     broadcastPlayerList,
     fillMissedHoles,
+    finishMapLoad,
     getCurrentMapName,
     getScoringPlayers,
+    getShotClockMs,
+    isConnected,
     pickColor,
+    startShotClock,
 } from "../gameLogic";
-import { getPlayersList } from "../serverHelpers";
+import { broadcastSingle, getPlayersList } from "../serverHelpers";
 import {
     CourseState,
     GameState,
@@ -27,6 +32,8 @@ export function handleConnection(
     const player: Player = {
         id: playerId,
         socket,
+        connected: true,
+        rejoinToken: randomUUID(),
         state: { points: [] },
         waitingForNextRound: shouldWait,
         name,
@@ -55,47 +62,145 @@ export function handleConnection(
         ctx.hostId = playerId;
     }
 
-    // Tell the client which ID belongs to them
-    socket.send(
-        JSON.stringify({
+    sendWelcome(ctx, player);
+
+    // Send the updated player list to everyone
+    broadcastPlayerList(ctx);
+}
+
+/**
+ * A player whose connection dropped is back (they refreshed, or reopened
+ * the tab): they carry on as themselves, with their ball and scores.
+ */
+export function handleRejoin(
+    socket: WebSocket,
+    ctx: ServerContext,
+    player: Player,
+) {
+    clearTimeout(player.removeTimer);
+    player.removeTimer = undefined;
+
+    // Rejoining from a second tab: the newer one takes over
+    if (player.socket && player.socket !== socket) {
+        player.socket.close();
+    }
+
+    player.socket = socket;
+    player.connected = true;
+
+    console.log(`Player ${player.id} rejoined lobby ${ctx.code}`);
+
+    // Nobody else was here to be host: they are again
+    const host = ctx.hostId ? ctx.players.get(ctx.hostId) : undefined;
+    const becameHost = !host || (host !== player && !isConnected(host));
+    if (becameHost) {
+        ctx.hostId = player.id;
+    }
+    const isHost = ctx.hostId === player.id;
+
+    // The clock stopped while nobody was here to shoot
+    if (ctx.gameState === GameState.PLANNING && !ctx.shotClockTimer) {
+        startShotClock(ctx);
+    }
+
+    sendWelcome(ctx, player);
+
+    // They'd already locked in this shot before they dropped
+    if (ctx.playersReady.has(player.id)) {
+        broadcastSingle(
+            { type: MessageTypeServer.SHOT_SELECTION_CONFIRMATION },
+            player,
+        );
+    }
+
+    broadcastPlayerList(ctx);
+
+    if (!isHost) {
+        return;
+    }
+
+    // A shot was mid-flight with no host to simulate it: they do it now
+    if (
+        ctx.gameState === GameState.SIMULATING &&
+        ctx.currentShots &&
+        !ctx.simulationReports.has(player.id)
+    ) {
+        broadcastSingle(
+            {
+                type: MessageTypeServer.GAME_STATE,
+                data: {
+                    state: GameState.SIMULATING_HOST,
+                    playerList: ctx.currentShots as Player[],
+                    shouldWait: player.waitingForNextRound,
+                },
+            },
+            player,
+        );
+    }
+
+    // The scoreboard was waiting for the host's next map: their welcome
+    // already put them on it
+    if (ctx.gameState === GameState.ROUND_COMPLETE) {
+        finishMapLoad(ctx);
+    }
+}
+
+/**
+ * Tell a (re)connected player who they are, and everything about the game
+ * as it is right now, so they can pick up wherever it is.
+ */
+function sendWelcome(ctx: ServerContext, player: Player) {
+    const shouldWait = player.waitingForNextRound;
+
+    broadcastSingle(
+        {
             type: MessageTypeServer.CONNECTED,
-            data: { playerId: playerId, lobbyCode: ctx.code },
-        }),
+            data: {
+                playerId: player.id,
+                lobbyCode: ctx.code,
+                rejoinToken: player.rejoinToken,
+            },
+        },
+        player,
     );
 
-    // Joining a game in progress: send where everyone's ball is, so the
-    // new player can watch until the next hole
+    // Mid-hole: where everyone's ball is (a late joiner watches until the
+    // next hole; someone rejoining carries on with theirs)
+    const onCourse =
+        ctx.gameState !== GameState.WAITING &&
+        ctx.gameState !== GameState.GAME_OVER;
+
+    const courseState: CourseState | undefined = onCourse
+        ? {
+              players: getPlayersList(ctx.players).filter(
+                  (other) => !other.waitingForNextRound,
+              ),
+              ballLocations: ctx.ballLocations,
+              scoringPlayers: getScoringPlayers(ctx),
+          }
+        : undefined;
+
     const gameOver = ctx.gameState === GameState.GAME_OVER;
 
-    const courseState: CourseState | undefined =
-        shouldWait && !gameOver
-            ? {
-                  players: getPlayersList(ctx.players).filter(
-                      (other) => !other.waitingForNextRound,
-                  ),
-                  ballLocations: ctx.ballLocations,
-                  scoringPlayers: getScoringPlayers(ctx),
-              }
-            : undefined;
-
-    // Send the current game state and map to the client
-    socket.send(
-        JSON.stringify({
+    broadcastSingle(
+        {
             type: MessageTypeServer.GAME_STATE,
             data: {
                 state: ctx.gameState,
-                isHost: ctx.hostId === playerId,
+                isHost: ctx.hostId === player.id,
                 shouldWait,
                 mapName: getCurrentMapName(ctx),
                 hole: ctx.holeIndex + 1,
                 lobbyCode: ctx.code,
                 courseState,
+                shotClockMs:
+                    ctx.gameState === GameState.PLANNING
+                        ? getShotClockMs(ctx)
+                        : undefined,
                 // Joining on the final scores: show them too
                 playerList: gameOver ? getPlayersList(ctx.players) : undefined,
             },
-        }),
+        },
+        player,
     );
-
-    // Send the updated player list to everyone
-    broadcastPlayerList(ctx);
 }

@@ -42,6 +42,8 @@ export function getPlayersList(
         name: player.name,
         color: player.color,
         catchphrase: player.catchphrase,
+        // Shown as "Reconnecting" while their place is held
+        connected: player.connected !== false,
         ready: playersReady?.has(player.id) ?? false,
         roundState: player.roundState,
         state: {

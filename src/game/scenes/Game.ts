@@ -150,6 +150,9 @@ export class Game extends Phaser.Scene {
             () => this.sounds.isMuted(),
         );
 
+        this.ui.onClockTick = () => this.sounds.clockTick();
+        this.network.onConnectionLost = () => this.ui.showConnectionLost();
+
         // The aim arrow reports its charge to the power bar
         this.aimController.onChargeChange = (charge) =>
             this.ui.setCharge(charge);
@@ -246,6 +249,7 @@ export class Game extends Phaser.Scene {
     update() {
         this.currentMap.update();
         this.ballManager.update();
+        this.ui?.update();
     }
 
     lockIn() {

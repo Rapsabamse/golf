@@ -111,6 +111,11 @@ export class GameStateHandler {
         }
 
         this.ui.updateUI(gamestate, data?.shouldWait);
+
+        // Each new shot comes with the time left to take it
+        this.ui.setShotClock(
+            gamestate === GameState.PLANNING ? data?.shotClockMs : undefined,
+        );
     }
 
     private showCourseState(courseState: CourseState) {

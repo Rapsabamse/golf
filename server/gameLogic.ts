@@ -11,6 +11,7 @@ import {
     MAPS,
     MessageTypeServer,
     Player,
+    SHOT_CLOCK_MS,
 } from "./types/types";
 
 /** Ball colours, picked to stand out against the green course. */
@@ -53,15 +54,107 @@ export function getActivePlayers(ctx: ServerContext): Player[] {
     );
 }
 
+/** False while a player's connection is gone and their place is held. */
+export function isConnected(player: Player) {
+    return player.connected !== false;
+}
+
+/**
+ * Players who still have a shot to take on this hole and are here to take
+ * it. Players whose connection dropped never hold anyone up.
+ */
+function getConnectedShooters(ctx: ServerContext): Player[] {
+    return getActivePlayers(ctx).filter(
+        (player) => !player.roundState?.hasScored && isConnected(player),
+    );
+}
+
+/** Start the clock for a new shot. When it runs out, the shot starts anyway. */
+export function startShotClock(ctx: ServerContext) {
+    stopShotClock(ctx);
+
+    ctx.shotClockEndsAt = Date.now() + SHOT_CLOCK_MS;
+    ctx.shotClockTimer = setTimeout(() => {
+        ctx.shotClockTimer = undefined;
+        ctx.shotClockEndsAt = undefined;
+        console.log(`Lobby ${ctx.code}: shot clock ran out`);
+        tryStartSimulation(ctx, true);
+    }, SHOT_CLOCK_MS);
+}
+
+export function stopShotClock(ctx: ServerContext) {
+    if (ctx.shotClockTimer) {
+        clearTimeout(ctx.shotClockTimer);
+    }
+
+    ctx.shotClockTimer = undefined;
+    ctx.shotClockEndsAt = undefined;
+}
+
+/** Time left on the shot clock, for clients (undefined when it isn't running). */
+export function getShotClockMs(ctx: ServerContext): number | undefined {
+    return ctx.shotClockEndsAt === undefined
+        ? undefined
+        : Math.max(0, ctx.shotClockEndsAt - Date.now());
+}
+
+/**
+ * A new shot: start the clock and tell everyone, with where the balls are
+ * (extra) if they moved.
+ */
+function startPlanning(
+    ctx: ServerContext,
+    extra: { ballLocations?: BallLocation[]; scoringPlayers?: string[] } = {},
+) {
+    ctx.gameState = GameState.PLANNING;
+    ctx.playersReady.clear();
+
+    // Nobody here to shoot: the clock waits until someone comes back
+    if (getConnectedShooters(ctx).length > 0) {
+        startShotClock(ctx);
+    } else {
+        stopShotClock(ctx);
+    }
+
+    for (const player of ctx.players.values()) {
+        broadcastSingle(
+            {
+                type: MessageTypeServer.GAME_STATE,
+                data: {
+                    state: GameState.PLANNING,
+                    mapName: getCurrentMapName(ctx),
+                    hole: ctx.holeIndex + 1,
+                    shouldWait: player.waitingForNextRound,
+                    shotClockMs: getShotClockMs(ctx),
+                    ...extra,
+                },
+            },
+            player,
+        );
+    }
+
+    // New planning phase: nobody is locked in, some may have holed out
+    broadcastPlayerList(ctx);
+}
+
 export function getScoringPlayers(ctx: ServerContext): string[] {
     return Array.from(ctx.players.values())
         .filter((player) => player.roundState?.hasScored)
         .map((player) => player.id);
 }
 
-/** Prefer someone who is actually playing, so a late joiner never becomes host mid-round. */
+/**
+ * The best player to be host: someone connected and playing (so a late
+ * joiner never becomes host mid-round), else anyone connected. Undefined
+ * when nobody is connected.
+ */
 export function pickHost(ctx: ServerContext): string | undefined {
-    return getActivePlayers(ctx)[0]?.id ?? ctx.players.keys().next().value;
+    const connected = Array.from(ctx.players.values()).filter(isConnected);
+
+    return (
+        connected.find((player) => !player.waitingForNextRound)?.id ??
+        connected[0]?.id
+    );
 }
 
 function clearRoundTracking(ctx: ServerContext) {
@@ -114,21 +207,7 @@ export function startGame(ctx: ServerContext) {
         player.shot = undefined;
     }
 
-    ctx.gameState = GameState.PLANNING;
-
-    broadcast(
-        {
-            type: MessageTypeServer.GAME_STATE,
-            data: {
-                state: GameState.PLANNING,
-                mapName: getCurrentMapName(ctx),
-                hole: ctx.holeIndex + 1,
-            },
-        },
-        ctx.players,
-    );
-
-    broadcastPlayerList(ctx);
+    startPlanning(ctx);
 }
 
 /** Send everyone back to the lobby with a clean scoreboard. */
@@ -139,6 +218,8 @@ export function resetGame(ctx: ServerContext) {
     ctx.holeIndex = 0;
     ctx.holeMaxShots = [];
     ctx.ballLocations = [];
+    ctx.currentShots = undefined;
+    stopShotClock(ctx);
     clearRoundTracking(ctx);
 
     for (const player of ctx.players.values()) {
@@ -167,24 +248,50 @@ export function resetGame(ctx: ServerContext) {
 }
 
 /**
- * Start simulating once every player who still has to shoot has locked in.
- * Called when someone locks in, and when someone leaves (they might have
- * been the last one everyone was waiting for).
+ * Start simulating once every connected player who still has to shoot has
+ * locked in, or when the shot clock runs out (clockRanOut). Called when
+ * someone locks in, and when someone leaves (they might have been the last
+ * one everyone was waiting for).
+ *
+ * Who shoots: everyone who locked in, and when the clock ran out, anyone
+ * who had aimed. Anyone else stays still, and it doesn't count as a shot.
  */
-export function tryStartSimulation(ctx: ServerContext) {
+export function tryStartSimulation(ctx: ServerContext, clockRanOut = false) {
     if (ctx.gameState !== GameState.PLANNING) {
         return;
     }
 
-    const shooters = getActivePlayers(ctx).filter(
-        (player) => !player.roundState?.hasScored,
-    );
+    const connectedShooters = getConnectedShooters(ctx);
 
-    if (shooters.length === 0) {
+    // Nobody here to shoot (everyone's connection dropped): wait for them
+    if (connectedShooters.length === 0) {
+        stopShotClock(ctx);
         return;
     }
 
-    if (!shooters.every((player) => ctx.playersReady.has(player.id))) {
+    if (
+        !clockRanOut &&
+        !connectedShooters.every((player) => ctx.playersReady.has(player.id))
+    ) {
+        return;
+    }
+
+    const shooters = getActivePlayers(ctx).filter(
+        (player) =>
+            !player.roundState?.hasScored &&
+            player.shot !== undefined &&
+            (ctx.playersReady.has(player.id) || clockRanOut),
+    );
+
+    stopShotClock(ctx);
+
+    // Nobody aimed before the clock ran out: nothing moves, next shot
+    if (shooters.length === 0) {
+        for (const player of ctx.players.values()) {
+            player.shot = undefined;
+        }
+
+        startPlanning(ctx);
         return;
     }
 
@@ -194,8 +301,10 @@ export function tryStartSimulation(ctx: ServerContext) {
 
     const playerList = Array.from(ctx.players.values()).map((player) => ({
         id: player.id,
-        shot: player.shot,
+        shot: shooters.includes(player) ? player.shot : undefined,
     }));
+
+    ctx.currentShots = playerList;
 
     console.log("Sending simulation data to clients");
 
@@ -237,29 +346,14 @@ export function finishSimulation(
     }
 
     ctx.ballLocations = locations;
-    ctx.gameState = GameState.PLANNING;
+    ctx.currentShots = undefined;
 
     console.log("broadcasting ball-locations");
 
-    const scoringPlayers = getScoringPlayers(ctx);
-
-    for (const player of ctx.players.values()) {
-        broadcastSingle(
-            {
-                type: MessageTypeServer.GAME_STATE,
-                data: {
-                    state: GameState.PLANNING,
-                    ballLocations: ctx.ballLocations,
-                    scoringPlayers,
-                    shouldWait: player.waitingForNextRound,
-                },
-            },
-            player,
-        );
-    }
-
-    // New planning phase: nobody is locked in, some may have holed out
-    broadcastPlayerList(ctx);
+    startPlanning(ctx, {
+        ballLocations: ctx.ballLocations,
+        scoringPlayers: getScoringPlayers(ctx),
+    });
 }
 
 export function applyGoal(ctx: ServerContext, scoringPlayerId: string) {
@@ -306,7 +400,9 @@ export function tryCompleteRound(ctx: ServerContext) {
         return;
     }
 
-    const active = getActivePlayers(ctx);
+    // Players whose connection dropped don't hold up the hole; if they
+    // don't finish it, they get its worst score like late joiners
+    const active = getActivePlayers(ctx).filter(isConnected);
 
     if (
         active.length === 0 ||
@@ -318,9 +414,12 @@ export function tryCompleteRound(ctx: ServerContext) {
     const wasLastHole = ctx.holeIndex + 1 >= MAPS.length;
 
     ctx.ballLocations = [];
+    ctx.currentShots = undefined;
+    stopShotClock(ctx);
     clearRoundTracking(ctx);
 
-    // Whoever joined during this hole gets its worst score
+    // Whoever joined during this hole (or left before finishing it) gets
+    // its worst score
     for (const player of ctx.players.values()) {
         fillMissedHoles(ctx, player, ctx.holeIndex + 1);
     }
@@ -375,21 +474,8 @@ export function finishMapLoad(ctx: ServerContext) {
     }
 
     ctx.mapLoaded.clear();
-    ctx.gameState = GameState.PLANNING;
 
-    broadcast(
-        {
-            type: MessageTypeServer.GAME_STATE,
-            data: {
-                state: GameState.PLANNING,
-                mapName: getCurrentMapName(ctx),
-                hole: ctx.holeIndex + 1,
-            },
-        },
-        ctx.players,
-    );
-
-    broadcastPlayerList(ctx);
+    startPlanning(ctx);
 }
 
 /**

@@ -1,8 +1,8 @@
 import { WebSocketServer, WebSocket, RawData } from "ws";
 import { randomUUID } from "crypto";
 import { handleMessages } from "./handlers/messageHandler";
-import { handleConnection } from "./handlers/connectionHandler";
-import { handleClose } from "./handlers/closeHandler";
+import { handleConnection, handleRejoin } from "./handlers/connectionHandler";
+import { handleDisconnect } from "./handlers/closeHandler";
 import { ServerContext } from "./serverState";
 import {
     cleanCatchphrase,
@@ -10,11 +10,12 @@ import {
     createLobby,
     findLobby,
     normalizeCode,
-    removeLobbyIfEmpty,
 } from "./lobbies";
 import { MessageTypeClient, MessageTypeServer } from "./types/types";
 
 const PORT = Number(process.env.PORT) || 8090;
+/** How often to check each connection is still alive. */
+const HEARTBEAT_MS = 10_000;
 
 const wss = new WebSocketServer({
     port: PORT,
@@ -23,7 +24,8 @@ const wss = new WebSocketServer({
 console.log(`WebSocket server running on port ${PORT}`);
 
 wss.on("connection", (socket: WebSocket) => {
-    const playerId = randomUUID();
+    // A rejoining player gets their old ID back
+    let playerId: string = randomUUID();
 
     /** The lobby this player is in, once they've hosted or joined one. */
     let lobby: ServerContext | undefined;
@@ -41,7 +43,13 @@ wss.on("connection", (socket: WebSocket) => {
     const handleLobbyRequest = (data: RawData) => {
         let message: {
             type?: unknown;
-            data?: { code?: unknown; name?: unknown; catchphrase?: unknown };
+            data?: {
+                code?: unknown;
+                name?: unknown;
+                catchphrase?: unknown;
+                token?: unknown;
+                takeover?: unknown;
+            };
         };
         try {
             message = JSON.parse(data.toString());
@@ -60,6 +68,38 @@ wss.on("connection", (socket: WebSocket) => {
         if (message.type === MessageTypeClient.HOST_LOBBY) {
             lobby = createLobby();
             handleConnection(socket, playerId, lobby, name, catchphrase);
+            return;
+        }
+
+        // Back after a refresh: carry on as the same player
+        if (message.type === MessageTypeClient.REJOIN_LOBBY) {
+            const found =
+                typeof message.data?.code === "string"
+                    ? findLobby(message.data.code)
+                    : undefined;
+            const token = message.data?.token;
+            const player =
+                found && typeof token === "string" && token
+                    ? Array.from(found.players.values()).find(
+                          (candidate) => candidate.rejoinToken === token,
+                      )
+                    : undefined;
+
+            if (!found || !player) {
+                sendError("That game has ended");
+                return;
+            }
+
+            // Only the player's own tab (after a refresh) may replace a live
+            // connection; another tab can't become someone who's still here
+            if (player.connected !== false && message.data?.takeover !== true) {
+                sendError("That player is still in the game");
+                return;
+            }
+
+            lobby = found;
+            playerId = player.id;
+            handleRejoin(socket, lobby, player);
             return;
         }
 
@@ -92,14 +132,26 @@ wss.on("connection", (socket: WebSocket) => {
         }
     });
 
+    // Their place is held for a while in case they come back (a refresh)
     socket.on("close", () => {
-        if (!lobby) {
+        if (lobby) {
+            handleDisconnect(playerId, lobby, socket);
+        }
+    });
+
+    // Notice connections that died without closing (a laptop lid, a lost
+    // network): no answer to a ping means they're gone
+    let alive = true;
+    socket.on("pong", () => (alive = true));
+    const heartbeat = setInterval(() => {
+        if (!alive) {
+            socket.terminate();
             return;
         }
-
-        handleClose(playerId, lobby);
-        removeLobbyIfEmpty(lobby);
-    });
+        alive = false;
+        socket.ping();
+    }, HEARTBEAT_MS);
+    socket.on("close", () => clearInterval(heartbeat));
 
     // Without a listener, a socket error would crash the server
     socket.on("error", (error) => {

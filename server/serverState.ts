@@ -33,6 +33,14 @@ export interface ServerContext {
      * joiners get this score for the holes they missed.
      */
     holeMaxShots: number[];
+    /** When the current shot's clock runs out (server time), while aiming. */
+    shotClockEndsAt?: number;
+    shotClockTimer?: ReturnType<typeof setTimeout>;
+    /**
+     * The shots being simulated, kept so a host who refreshes mid-shot can
+     * be sent them again.
+     */
+    currentShots?: Pick<Player, "id" | "shot">[];
 }
 
 export function createServerContext(code = ""): ServerContext {

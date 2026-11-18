@@ -50,6 +50,11 @@ export class SoundEffects {
         this.tone(990, 0.35, 0.25, "sine", 0.38);
     }
 
+    /** Soft tick for each of the last seconds on the shot clock. */
+    clockTick() {
+        this.tone(1800, 0.03, 0.07, "square", 0);
+    }
+
     /** Short tick when your shot is locked in. */
     lockIn() {
         this.tone(1200, 0.05, 0.15, "triangle", 0);
