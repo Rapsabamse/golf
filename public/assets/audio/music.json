@@ -1,0 +1,23 @@
+{
+  "title": "Hole in Fun",
+  "sampleRate": 44100,
+  "pad": 22050,
+  "parts": [
+    {
+      "file": "battle-1.mp3",
+      "samples": 1984500
+    },
+    {
+      "file": "battle-2.mp3",
+      "samples": 1984500
+    },
+    {
+      "file": "battle-3.mp3",
+      "samples": 1984500
+    },
+    {
+      "file": "battle-4.mp3",
+      "samples": 1984500
+    }
+  ]
+}

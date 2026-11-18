@@ -84,6 +84,15 @@ export class SoundEffects {
             return undefined;
         }
 
+        const context = this.getContext();
+        return context ? { context, output: this.master! } : undefined;
+    }
+
+    /**
+     * The game's one audio context (the music plays through it too), made
+     * on first use. Undefined if the browser has no Web Audio.
+     */
+    getContext(): AudioContext | undefined {
         if (!this.context) {
             const AudioContextClass =
                 window.AudioContext ??
@@ -105,7 +114,7 @@ export class SoundEffects {
             void this.context.resume();
         }
 
-        return { context: this.context, output: this.master! };
+        return this.context;
     }
 
     private tone(
