@@ -192,6 +192,11 @@ export interface ServerData {
      * than a clock time, so it doesn't matter if the clocks disagree.)
      */
     shotClockMs?: number;
+    /**
+     * Sent with ROUND_COMPLETE and GAME_OVER when the hole had a putt worth
+     * watching again.
+     */
+    shotOfHole?: ShotHighlight;
     /** Sent to someone joining a game in progress, so they can watch it. */
     courseState?: CourseState;
 }
@@ -205,6 +210,49 @@ export interface CourseState {
     /** Players who have already holed out. */
     scoringPlayers: string[];
 }
+
+/**
+ * What the host's simulation saw of one shot: sent with PLAYER_GOAL for a
+ * ball that went in, and with SIMULATION_DONE for the rest. The server
+ * picks each hole's best one to replay.
+ */
+export interface ShotStats {
+    /**
+     * The ball's path as x, y, kind triples. Kind 0: rolling, 1: in the
+     * air, 2: the path starts again here (it came out of a tunnel).
+     */
+    path: number[];
+    /** Walls and obstacles it bounced off. */
+    bounces: number;
+    tunnels: number;
+    jumps: number;
+    /** Times it rolled over the cup before it dropped. */
+    lipOuts?: number;
+    /** Other balls it knocked. */
+    ballHits?: number;
+    /** How far from the cup the ball was when hit, and where it stopped (px). */
+    startToCup?: number;
+    endToCup?: number;
+}
+
+/** The hole's best shot, replayed for everyone before the scores. */
+export interface ShotHighlight extends ShotStats {
+    playerId: string;
+    name: string;
+    color?: number;
+    catchphrase?: string;
+    /** Which of the player's shots on the hole it was (1: a hole in one). */
+    shotNumber: number;
+    /** How far the ball travelled, in pixels. */
+    length: number;
+    /** It went in (otherwise the replay ends where it stopped). */
+    sunk: boolean;
+    /** What it scored as a shot of the hole (see server/highlights.ts). */
+    points?: number;
+}
+
+/** Most path points a highlight carries (the client thins longer paths). */
+export const MAX_HIGHLIGHT_POINTS = 250;
 
 export interface BallLocation {
     playerId: string;

@@ -3,14 +3,25 @@ import {
     DEFAULT_COURSE_ID,
     GameState,
     Player,
+    ShotHighlight,
+    ShotStats,
 } from "./types/types";
+
+export interface ShotReport {
+    playerId: string;
+    shot: ShotStats;
+}
 
 /** What one client reported while simulating a round. */
 export interface SimulationReport {
     goals: Set<string>;
+    /** What each of those putts looked like, for the shot of the hole. */
+    goalShots?: Map<string, ShotStats>;
     locations?: BallLocation[];
     /** Physics steps the simulation took (moves the obstacles on). */
     steps?: number;
+    /** The shots that didn't go in, for the shot of the hole. */
+    shots?: ShotReport[];
 }
 
 /**
@@ -52,6 +63,8 @@ export interface ServerContext {
      * be sent them again.
      */
     currentShots?: Pick<Player, "id" | "shot">[];
+    /** The best putt on this hole so far, replayed when it ends. */
+    holeHighlight?: ShotHighlight;
 }
 
 export function createServerContext(code = ""): ServerContext {

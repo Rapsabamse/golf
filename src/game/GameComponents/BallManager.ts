@@ -1,5 +1,5 @@
 import * as Phaser from "phaser";
-import { BallLocation, Player } from "../../../server/types/types";
+import { BallLocation, Player, ShotStats } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 import { GeneratedMap } from "../GameMaps/Type";
 import { SoundEffects } from "./SoundEffects";
@@ -26,7 +26,31 @@ export interface Ball {
     course: BallCourseState;
     /** Shadow on the ground while the ball is in the air. */
     shadow: Phaser.GameObjects.Ellipse;
+    /** What happened on this shot, for the shot of the hole. */
+    shot: ShotCounts;
 }
+
+interface ShotCounts {
+    /** This ball was hit this shot (not just knocked by another). */
+    taken: boolean;
+    /** Distance to the cup when it was hit. */
+    startToCup: number;
+    bounces: number;
+    tunnels: number;
+    jumps: number;
+    lipOuts: number;
+    ballHits: number;
+}
+
+const newShotCounts = (): ShotCounts => ({
+    taken: false,
+    startToCup: 0,
+    bounces: 0,
+    tunnels: 0,
+    jumps: 0,
+    lipOuts: 0,
+    ballHits: 0,
+});
 
 const BALLRADIUS = 12;
 const LABEL_OFFSET_Y = BALLRADIUS + 8;
@@ -225,6 +249,7 @@ export class BallManager {
             this.network.sendSimulationResult(
                 this.getBallPositions(),
                 this.simulationSteps,
+                this.getShotReports(),
             );
         }
     }
@@ -273,6 +298,7 @@ export class BallManager {
                 }
 
                 if (cup === "lip") {
+                    ball.shot.lipOuts += 1;
                     this.showLipOut(ball);
                 }
             }
@@ -317,12 +343,14 @@ export class BallManager {
     private onCourseEvent(ball: Ball, event: BallEvent) {
         switch (event) {
             case "jumped":
+                ball.shot.jumps += 1;
                 this.sounds.jump();
                 break;
             case "landed":
                 this.sounds.bounce(0.5);
                 break;
             case "tunnel":
+                ball.shot.tunnels += 1;
                 // It popped out somewhere else: don't roll it across the map
                 ball.skin.jumpTo(ball.body.position.x, ball.body.position.y);
                 this.sounds.tunnel();
@@ -399,12 +427,25 @@ export class BallManager {
         // A new shot: last shot's lines go
         this.trails.clear();
 
+        const cup = this.gameMap.goal.position;
+
+        for (const ball of this.balls.values()) {
+            ball.shot = newShotCounts();
+            ball.shot.startToCup = Phaser.Math.Distance.Between(
+                ball.body.position.x,
+                ball.body.position.y,
+                cup.x,
+                cup.y,
+            );
+        }
+
         let strongestShot = 0;
 
         //Go through each ball and add the velocity send by the server
         data.forEach((player) => {
             const ball = this.balls.get(player.id);
             if (ball && player.shot?.direction) {
+                ball.shot.taken = true;
                 // Hit: it's rolling again, even off a slope it settled on
                 ball.course.resting = false;
                 ball.course.slowSteps = 0;
@@ -439,7 +480,11 @@ export class BallManager {
                 this.playSinkAnimation(ball);
                 this.sounds.cup();
 
-                this.network.sendGoalReached(playerId);
+                // The path and what it went off, in case it's the shot of the hole
+                this.network.sendGoalReached(playerId, {
+                    ...this.getShotStats(playerId, ball, this.gameMap.goal.position),
+                    endToCup: 0,
+                });
                 return;
             }
         }
@@ -501,6 +546,7 @@ export class BallManager {
             catchphrase: DEFAULT_CATCHPHRASE,
             course: newBallCourseState(),
             shadow,
+            shot: newShotCounts(),
         };
     }
 
@@ -615,9 +661,81 @@ export class BallManager {
                         this.gameMap.onWallHit(body);
                     }
                 }
+
+                // Knocking another ball counts for the faster one
+                const ballA = this.findBall(pair.bodyA);
+                const ballB = this.findBall(pair.bodyB);
+                if (this.isSimulating && ballA && ballB) {
+                    const hitter =
+                        pair.bodyA.speed >= pair.bodyB.speed ? ballA : ballB;
+                    hitter.shot.ballHits += 1;
+                }
+
+                // A bank shot (counted during shots only)
+                if (this.isSimulating && (pair.bodyA.isStatic || pair.bodyB.isStatic)) {
+                    const ball = this.findBall(
+                        pair.bodyA.isStatic ? pair.bodyB : pair.bodyA,
+                    );
+                    if (ball) {
+                        ball.shot.bounces += 1;
+                    }
+                }
             }
         }
     };
+
+    private findBall(body: MatterJS.BodyType): Ball | undefined {
+        for (const ball of this.balls.values()) {
+            if (ball.body === body) {
+                return ball;
+            }
+        }
+        return undefined;
+    }
+
+    /** One ball's shot, as the server scores it for the shot of the hole. */
+    private getShotStats(
+        playerId: string,
+        ball: Ball,
+        end: { x: number; y: number },
+    ): ShotStats {
+        const cup = this.gameMap.goal.position;
+        const { bounces, tunnels, jumps, lipOuts, ballHits, startToCup } = ball.shot;
+
+        return {
+            path: this.trails.getPath(playerId, end),
+            bounces,
+            tunnels,
+            jumps,
+            lipOuts,
+            ballHits,
+            startToCup,
+            endToCup: Phaser.Math.Distance.Between(end.x, end.y, cup.x, cup.y),
+        };
+    }
+
+    /** Every shot this round that didn't go in, with where it stopped. */
+    private getShotReports(): { playerId: string; shot: ShotStats }[] {
+        const reports: { playerId: string; shot: ShotStats }[] = [];
+
+        for (const [playerId, ball] of this.balls) {
+            if (!ball.shot.taken || !ball.inWorld) {
+                continue;
+            }
+
+            const shot = this.getShotStats(playerId, ball, ball.body.position);
+            if (shot.path.length >= 6) {
+                reports.push({ playerId, shot });
+            }
+        }
+
+        return reports;
+    }
+
+    /** Clear the last shot's lines (the shot of the hole is about to play). */
+    clearTrails() {
+        this.trails.clear();
+    }
 
     private isBallBody(body: MatterJS.BodyType) {
         for (const ball of this.balls.values()) {

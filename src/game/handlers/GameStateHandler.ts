@@ -10,6 +10,7 @@ import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
 import { Scoreboard } from "../GameComponents/Scoreboard";
+import { ShotReplay } from "../GameComponents/ShotReplay";
 import { GeneratedMap } from "../GameMaps/Type";
 import { TiledMapLoader } from "../GameMaps/TileReader";
 import { getBaseMap } from "../GameMaps/maps";
@@ -32,9 +33,13 @@ export class GameStateHandler {
 
     private finalPlayers: Player[] = [];
 
-    /** The map switch scheduled after the scoreboard, if one is pending. */
+    /**
+     * The map switch scheduled after the shot of the hole and the
+     * scoreboard, if one is pending.
+     */
     private pendingMapLoad?: {
-        timer: Phaser.Time.TimerEvent;
+        /** Stops the replay or the scoreboard timer. */
+        cancel: () => void;
         run: () => void;
     };
 
@@ -49,11 +54,20 @@ export class GameStateHandler {
         private readonly haveIScored: () => boolean,
         private readonly setScoredPlayers: (players: string[]) => void,
         private readonly setCurrentMap: (map: GeneratedMap) => void,
+        private readonly replay: ShotReplay,
     ) {}
 
     handle(gamestate: GameState, data?: ServerData) {
         // The lobby screen replaces the course while waiting
         this.scene.cameras.main.setVisible(gamestate !== GameState.WAITING);
+
+        // The shot of the hole only plays as a hole ends
+        if (
+            gamestate !== GameState.ROUND_COMPLETE &&
+            gamestate !== GameState.GAME_OVER
+        ) {
+            this.replay.stop();
+        }
 
         if (gamestate === GameState.WAITING) {
             // Game was reset: drop the scheduled switch to the next hole
@@ -202,11 +216,6 @@ export class GameStateHandler {
         const nextHole = data.hole;
 
         this.setScoredPlayers([]);
-        this.scoreboard.show(
-            playerList,
-            this.network.getPlayerId(),
-            SCOREBOARD_DURATION_MS,
-        );
 
         const run = () => {
             this.scoreboard.hide();
@@ -219,14 +228,51 @@ export class GameStateHandler {
             this.network.sendMapLoaded();
         };
 
+        const showScores = () => {
+            this.scoreboard.show(
+                playerList,
+                this.network.getPlayerId(),
+                SCOREBOARD_DURATION_MS,
+            );
+
+            const timer = this.scene.time.delayedCall(
+                SCOREBOARD_DURATION_MS,
+                () => {
+                    this.pendingMapLoad = undefined;
+                    run();
+                },
+            );
+
+            this.pendingMapLoad = {
+                cancel: () => this.scene.time.removeEvent(timer),
+                run,
+            };
+        };
+
         this.finishPendingMapLoad(false);
 
-        const timer = this.scene.time.delayedCall(SCOREBOARD_DURATION_MS, () => {
-            this.pendingMapLoad = undefined;
-            run();
-        });
+        // The hole's best putt first, if it had one worth watching
+        this.playShotOfHole(data, showScores);
 
-        this.pendingMapLoad = { timer, run };
+        if (this.replay.isRunning()) {
+            this.pendingMapLoad = {
+                cancel: () => this.replay.stop(),
+                run,
+            };
+        }
+    }
+
+    /** Replay the shot of the hole on the whole course, then carry on. */
+    private playShotOfHole(data: ServerData, then: () => void) {
+        if (!data.shotOfHole) {
+            then();
+            return;
+        }
+
+        this.aimController.clearAimline();
+        this.ballManager.clearTrails();
+        this.frameCourse();
+        this.replay.play(data.shotOfHole, then);
     }
 
     private handleGameOver(data?: ServerData) {
@@ -235,7 +281,10 @@ export class GameStateHandler {
         }
 
         this.setScoredPlayers([]);
-        this.showFinalScores(data.playerList);
+        this.finalPlayers = data.playerList;
+
+        // The last hole's best putt, then the final scores
+        this.playShotOfHole(data, () => this.showFinalScores());
     }
 
     /** Final scores, with Play again for whoever is host right now. */
@@ -275,7 +324,7 @@ export class GameStateHandler {
         }
 
         this.pendingMapLoad = undefined;
-        this.scene.time.removeEvent(pending.timer);
+        pending.cancel();
 
         if (runNow) {
             pending.run();

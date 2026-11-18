@@ -6,6 +6,7 @@ import { AimController } from "../GameComponents/Controller";
 import { BallManager } from "../GameComponents/BallManager";
 import { GameUI } from "../GameComponents/UI";
 import { GeneratedMap } from "../GameMaps/Type";
+import { ShotReplay } from "../GameComponents/ShotReplay";
 import { Scoreboard } from "../GameComponents/Scoreboard";
 import { TiledMapLoader } from "../GameMaps/TileReader";
 import { getBaseMap } from "../GameMaps/maps";
@@ -155,11 +156,15 @@ export class Game extends Phaser.Scene {
         //Create the scoreboard
         this.scoreboard = new Scoreboard(hud);
 
+        // Replays each hole's best putt before the scores
+        const replay = new ShotReplay(this, hud, this.sounds);
+
         // Anchor the interface to the screen edges, now and on every resize
         const layoutInterface = () => {
             const { width, height } = applyUiScale(hud);
             this.ui.layout(width, height);
             this.scoreboard.layout(width, height);
+            replay.layout(width, height);
         };
 
         layoutInterface();
@@ -181,6 +186,7 @@ export class Game extends Phaser.Scene {
             (map) => {
                 this.currentMap = map;
             },
+            replay,
         );
 
         //Subscribe to playerListUpdates

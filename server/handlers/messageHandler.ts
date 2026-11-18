@@ -6,10 +6,12 @@ import {
     MAX_SHOT_SPEED,
     MessageTypeClient,
     MessageTypeServer,
+    ShotStats,
     Vector,
 } from "../types/types";
+import { parseShotStats } from "../highlights";
 import { broadcastSingle } from "../serverHelpers";
-import { ServerContext, SimulationReport } from "../serverState";
+import { ServerContext, ShotReport, SimulationReport } from "../serverState";
 import {
     applyGoal,
     broadcastPlayerList,
@@ -22,6 +24,8 @@ import {
 } from "../gameLogic";
 
 const MAX_NAME_LENGTH = 16;
+/** More shots in one report than any lobby has players. */
+const MAX_SHOT_REPORTS = 16;
 
 export function handleMessages(
     playerId: string,
@@ -142,40 +146,55 @@ export function handleMessages(
                 return;
             }
 
-            // { locations, steps }, or just the locations from older clients
+            // { locations, steps, shots }, or just the locations from older clients
             const result =
                 message.data && !Array.isArray(message.data)
-                    ? (message.data as { locations?: unknown; steps?: unknown })
+                    ? (message.data as {
+                          locations?: unknown;
+                          steps?: unknown;
+                          shots?: unknown;
+                      })
                     : { locations: message.data };
             const locations = parseLocations(result.locations);
             const steps = parseSteps(result.steps);
+            const shots = parseShotReports(result.shots);
 
             const report = getReport(ctx, playerId);
             report.locations = locations;
             report.steps = steps;
+            report.shots = shots;
 
             if (isHost) {
-                finishSimulation(ctx, locations, steps);
+                finishSimulation(ctx, locations, steps, shots);
             }
             break;
         }
 
         // Client saw a ball go into the hole during the simulation
-        case MessageTypeClient.PLAYER_GOAL:
-            if (
-                ctx.gameState !== GameState.SIMULATING ||
-                typeof message.data !== "string"
-            ) {
+        case MessageTypeClient.PLAYER_GOAL: {
+            if (ctx.gameState !== GameState.SIMULATING) {
                 return;
             }
 
-            getReport(ctx, playerId).goals.add(message.data);
+            // Who went in, and (newer clients) what the putt looked like
+            const goal = parseGoal(message.data);
+            if (!goal) {
+                return;
+            }
+
+            const report = getReport(ctx, playerId);
+            report.goals.add(goal.playerId);
+            if (goal.shot) {
+                report.goalShots ??= new Map();
+                report.goalShots.set(goal.playerId, goal.shot);
+            }
 
             // Only the host's simulation counts
             if (isHost) {
-                applyGoal(ctx, message.data);
+                applyGoal(ctx, goal.playerId, goal.shot);
             }
             break;
+        }
 
         // Client finished loading the next map
         case MessageTypeClient.LOADED_NEW_MAP:
@@ -190,6 +209,26 @@ export function handleMessages(
             }
             break;
     }
+}
+
+/** PLAYER_GOAL's data: a player id, or { playerId, shot }. */
+function parseGoal(
+    data: unknown,
+): { playerId: string; shot?: ShotStats } | undefined {
+    if (typeof data === "string") {
+        return { playerId: data };
+    }
+
+    if (!data || typeof data !== "object") {
+        return undefined;
+    }
+
+    const goal = data as Record<string, unknown>;
+    if (typeof goal.playerId !== "string") {
+        return undefined;
+    }
+
+    return { playerId: goal.playerId, shot: parseShotStats(goal.shot) };
 }
 
 function getReport(ctx: ServerContext, playerId: string): SimulationReport {
@@ -227,6 +266,28 @@ function parseShot(data: unknown): Vector | undefined {
 }
 
 /** A simulation's length in physics steps: a whole number, within reason. */
+/** The shots that didn't go in, as { playerId, shot }. Bad ones are dropped. */
+function parseShotReports(data: unknown): ShotReport[] {
+    if (!Array.isArray(data)) {
+        return [];
+    }
+
+    const reports: ShotReport[] = [];
+
+    for (const entry of data.slice(0, MAX_SHOT_REPORTS)) {
+        if (!entry || typeof entry.playerId !== "string") {
+            continue;
+        }
+
+        const shot = parseShotStats(entry.shot);
+        if (shot) {
+            reports.push({ playerId: entry.playerId, shot });
+        }
+    }
+
+    return reports;
+}
+
 function parseSteps(data: unknown): number {
     return typeof data === "number" && Number.isFinite(data)
         ? Math.max(0, Math.min(100_000, Math.round(data)))

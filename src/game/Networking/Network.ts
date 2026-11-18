@@ -8,6 +8,7 @@ import {
     BallLocation,
     Vector,
     DEFAULT_COURSE_ID,
+    ShotStats,
 } from "../../../server/types/types";
 import { RejoinStore, SavedSession } from "./RejoinStore";
 
@@ -299,10 +300,18 @@ export class Network {
      * used, but the server keeps the others in case the host leaves mid-shot.
      */
     /** steps: how long the simulation ran (moves the obstacles on). */
-    sendSimulationResult(balls: BallLocation[], steps: number) {
+    /**
+     * Where the balls stopped, and the shots that didn't go in (any of them
+     * might be the shot of the hole).
+     */
+    sendSimulationResult(
+        balls: BallLocation[],
+        steps: number,
+        shots: { playerId: string; shot: ShotStats }[] = [],
+    ) {
         this.send({
             type: MessageTypeClient.SIMULATION_DONE,
-            data: { locations: balls, steps },
+            data: { locations: balls, steps, shots },
         });
     }
 
@@ -315,8 +324,12 @@ export class Network {
         return this.courseId;
     }
 
-    sendGoalReached(playerId: string) {
-        this.send({ type: MessageTypeClient.PLAYER_GOAL, data: playerId });
+    /** A ball went in. The shot goes along in case it's the shot of the hole. */
+    sendGoalReached(playerId: string, shot?: ShotStats) {
+        this.send({
+            type: MessageTypeClient.PLAYER_GOAL,
+            data: shot ? { playerId, shot } : playerId,
+        });
     }
 
     getPlayerId() {

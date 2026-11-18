@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { MAX_HIGHLIGHT_POINTS } from "../../../server/types/types";
 
 /** Under the aim line (99) and the balls (1000), over the course. */
 const TRAIL_DEPTH = 50;
@@ -98,6 +99,50 @@ export class ShotTrails {
         }
     }
 
+    /**
+     * This shot's path as x, y, kind triples for the shot of the hole (kind
+     * 0: rolled here, 1: flew here, 2: came out of a tunnel here), ending
+     * at `end` (the cup). Thinned to what the server accepts.
+     */
+    getPath(id: string, end?: { x: number; y: number }): number[] {
+        const points: [number, number, number][] = [];
+        let afterTunnel = false;
+
+        for (const piece of this.trails.get(id)?.pieces ?? []) {
+            if (piece.points.length === 0) {
+                afterTunnel = points.length > 0;
+                continue;
+            }
+
+            piece.points.forEach((point, index) => {
+                const previous = points[points.length - 1];
+
+                // A new piece starts on the last one's final point
+                if (
+                    index === 0 &&
+                    !afterTunnel &&
+                    previous &&
+                    previous[0] === Math.round(point.x) &&
+                    previous[1] === Math.round(point.y)
+                ) {
+                    return;
+                }
+
+                const kind =
+                    index === 0 && afterTunnel ? 2 : piece.air ? 1 : 0;
+                points.push([Math.round(point.x), Math.round(point.y), kind]);
+            });
+
+            afterTunnel = false;
+        }
+
+        if (end && points.length > 0) {
+            points.push([Math.round(end.x), Math.round(end.y), 0]);
+        }
+
+        return thin(points).flat();
+    }
+
     remove(id: string) {
         if (this.trails.delete(id)) {
             this.dirty = true;
@@ -191,6 +236,27 @@ export class ShotTrails {
             }
 
             untilNext = along - length;
+        }
+    }
+}
+
+/**
+ * Keep every few points so a long shot fits in a message. Points where the
+ * ball took off, landed or left a tunnel are always kept.
+ */
+function thin(points: [number, number, number][]): [number, number, number][] {
+    for (let step = 1; ; step++) {
+        const kept = points.filter(
+            (point, index) =>
+                index === 0 ||
+                index === points.length - 1 ||
+                index % step === 0 ||
+                point[2] !== points[index + 1]?.[2] ||
+                point[2] !== points[index - 1]?.[2],
+        );
+
+        if (kept.length <= MAX_HIGHLIGHT_POINTS || step > points.length) {
+            return kept.slice(0, MAX_HIGHLIGHT_POINTS);
         }
     }
 }

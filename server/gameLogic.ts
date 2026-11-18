@@ -1,4 +1,5 @@
-import { ServerContext } from "./serverState";
+import { ServerContext, ShotReport } from "./serverState";
+import { considerHighlight } from "./highlights";
 import {
     broadcast,
     broadcastSingle,
@@ -12,6 +13,7 @@ import {
     getCourse,
     Player,
     SHOT_CLOCK_MS,
+    ShotStats,
 } from "./types/types";
 
 /** Ball colours, picked to stand out against the green course. */
@@ -222,6 +224,7 @@ export function startGame(ctx: ServerContext) {
     ctx.courseTime = 0;
     ctx.holeMaxShots = [];
     ctx.ballLocations = [];
+    ctx.holeHighlight = undefined;
     clearRoundTracking(ctx);
 
     for (const player of ctx.players.values()) {
@@ -244,6 +247,7 @@ export function resetGame(ctx: ServerContext) {
     ctx.holeMaxShots = [];
     ctx.ballLocations = [];
     ctx.currentShots = undefined;
+    ctx.holeHighlight = undefined;
     stopShotClock(ctx);
     clearRoundTracking(ctx);
 
@@ -368,9 +372,29 @@ export function finishSimulation(
     ctx: ServerContext,
     locations: BallLocation[],
     steps = 0,
+    shots: ShotReport[] = [],
 ) {
     if (ctx.gameState !== GameState.SIMULATING) {
         return;
+    }
+
+    // The shots that didn't go in might still be the shot of the hole
+    const shooters = new Set(
+        (ctx.currentShots ?? [])
+            .filter((entry) => entry.shot)
+            .map((entry) => entry.id),
+    );
+
+    for (const { playerId, shot } of shots) {
+        const player = ctx.players.get(playerId);
+
+        if (
+            player?.roundState &&
+            !player.roundState.hasScored &&
+            shooters.has(playerId)
+        ) {
+            considerHighlight(ctx, player, player.roundState.shots, shot, false);
+        }
     }
 
     ctx.ballLocations = locations;
@@ -386,7 +410,11 @@ export function finishSimulation(
     });
 }
 
-export function applyGoal(ctx: ServerContext, scoringPlayerId: string) {
+export function applyGoal(
+    ctx: ServerContext,
+    scoringPlayerId: string,
+    shot?: ShotStats,
+) {
     const player = ctx.players.get(scoringPlayerId);
 
     if (
@@ -407,6 +435,11 @@ export function applyGoal(ctx: ServerContext, scoringPlayerId: string) {
         ctx.holeMaxShots[ctx.holeIndex] ?? 0,
         player.roundState.shots,
     );
+
+    // Might be the shot of the hole
+    if (shot) {
+        considerHighlight(ctx, player, player.roundState.shots, shot, true);
+    }
 
     console.log(
         "Player ",
@@ -449,6 +482,10 @@ export function tryCompleteRound(ctx: ServerContext) {
     stopShotClock(ctx);
     clearRoundTracking(ctx);
 
+    // Replayed for everyone before the scores
+    const shotOfHole = ctx.holeHighlight;
+    ctx.holeHighlight = undefined;
+
     // Whoever joined during this hole (or left before finishing it) gets
     // its worst score
     for (const player of ctx.players.values()) {
@@ -474,6 +511,7 @@ export function tryCompleteRound(ctx: ServerContext) {
                 data: {
                     state: GameState.GAME_OVER,
                     playerList: getPlayersList(ctx.players),
+                    shotOfHole,
                 },
             },
             ctx.players,
@@ -493,6 +531,7 @@ export function tryCompleteRound(ctx: ServerContext) {
                 playerList: getPlayersList(ctx.players),
                 mapName: getCurrentMapName(ctx),
                 hole: ctx.holeIndex + 1,
+                shotOfHole,
             },
         },
         ctx.players,
@@ -529,11 +568,15 @@ export function resumeWithNewHost(ctx: ServerContext) {
         }
 
         for (const scoringPlayerId of report.goals) {
-            applyGoal(ctx, scoringPlayerId);
+            applyGoal(
+                ctx,
+                scoringPlayerId,
+                report.goalShots?.get(scoringPlayerId),
+            );
         }
 
         if (report.locations) {
-            finishSimulation(ctx, report.locations, report.steps);
+            finishSimulation(ctx, report.locations, report.steps, report.shots);
         }
     } else if (
         ctx.gameState === GameState.ROUND_COMPLETE &&
