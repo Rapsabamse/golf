@@ -2,9 +2,13 @@ import * as Phaser from "phaser";
 import { Network } from "../Networking/Network";
 import { Button } from "../ui/Button";
 import { COLORS, CSS, TYPE, addText, drawPanel } from "../ui/theme";
+import { COURSES } from "../../../server/types/types";
 
 const ROW_HEIGHT = 40;
-const ROWS_PER_COLUMN = 8;
+const ROWS_PER_COLUMN = 6;
+const COURSE_CARD_WIDTH = 232;
+const COURSE_CARD_HEIGHT = 96;
+const COURSE_CARD_GAP = 14;
 const MAX_COLUMNS = 3;
 const COLUMN_WIDTH = 300;
 const COLUMN_GAP = 12;
@@ -68,6 +72,63 @@ export class LobbyScreen {
         this.update();
     }
 
+    /**
+     * One card per course; the picked one is outlined in green. The host
+     * can click another. Returns the height used.
+     */
+    private drawCourses(
+        top: number,
+        isHost: boolean,
+        add: <T extends Phaser.GameObjects.GameObject>(object: T) => T,
+    ) {
+        const picked = this.network.getCourseId();
+        const total =
+            COURSES.length * COURSE_CARD_WIDTH +
+            (COURSES.length - 1) * COURSE_CARD_GAP;
+        const cards = add(this.scene.add.graphics());
+
+        COURSES.forEach((course, index) => {
+            const left = -total / 2 + index * (COURSE_CARD_WIDTH + COURSE_CARD_GAP);
+            const isPicked = course.id === picked;
+
+            drawPanel(cards, left, top, COURSE_CARD_WIDTH, COURSE_CARD_HEIGHT);
+
+            if (isPicked) {
+                cards.lineStyle(3, COLORS.fairway, 1);
+                cards.strokeRoundedRect(left + 1.5, top + 1.5, COURSE_CARD_WIDTH - 3, COURSE_CARD_HEIGHT - 3, 14);
+            }
+
+            add(
+                addText(this.scene, left + 18, top + 16, course.name, {
+                    size: TYPE.label,
+                    bold: true,
+                    color: isPicked ? CSS.fairway : CSS.text,
+                }),
+            );
+
+            add(
+                addText(this.scene, left + 18, top + 47, course.description, {
+                    size: TYPE.small,
+                    color: CSS.muted,
+                    wrap: COURSE_CARD_WIDTH - 36,
+                }),
+            );
+
+            // Only the host can change it
+            if (isHost && !isPicked) {
+                add(
+                    this.scene.add
+                        .zone(left, top, COURSE_CARD_WIDTH, COURSE_CARD_HEIGHT)
+                        .setOrigin(0, 0)
+                        .setInteractive({ useHandCursor: true })
+                        .on("pointerup", () => this.network.selectCourse(course.id)),
+                );
+            }
+        });
+
+        return COURSE_CARD_HEIGHT;
+    }
+
     /** Redraw for the current players and host. */
     update() {
         if (!this.visible) {
@@ -106,9 +167,12 @@ export class LobbyScreen {
         );
         // Letter spacing also trails the last letter: shift back to centre
         code.x = 7;
-        y += code.height + 28;
+        y += code.height + 24;
 
-        // Players, in columns of up to eight
+        // The course: the host picks, everyone sees the pick
+        y += this.drawCourses(y, isHost, add) + 24;
+
+        // Players, in columns of up to six
         const columns = Math.min(
             MAX_COLUMNS,
             Math.max(1, Math.ceil(players.length / ROWS_PER_COLUMN)),

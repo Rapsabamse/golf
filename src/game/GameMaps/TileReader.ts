@@ -3,6 +3,7 @@ import { Goal } from "./Goal";
 import { GeneratedMap } from "./Type";
 import * as Phaser from "phaser";
 import { CourseBake } from "./CourseBake";
+import { CourseFeatures, HEDGE_CATEGORY } from "./CourseFeatures";
 import {
     DEPTH,
     TURF_TEXTURE,
@@ -102,8 +103,14 @@ export class TiledMapLoader {
 
         let goalPosition: Phaser.Math.Vector2 | undefined;
         let spawnLine: SpawnLine | undefined;
+        const features = new CourseFeatures(scene);
 
         for (const object of objectsLayer.objects) {
+            if (CourseFeatures.NAMES.includes(object.name)) {
+                features.add(object);
+                continue;
+            }
+
             switch (object.name) {
                 case "Wall": {
                     const drawnBefore = wallGraphics.length;
@@ -198,8 +205,12 @@ export class TiledMapLoader {
             DEPTH.floatShadow,
         );
 
+        // Moving pieces start where the hole starts
+        features.setTime(0);
+
         return {
             goal,
+            features,
 
             onWallHit(body) {
                 const flash = bumperFlashes.get(body);
@@ -236,6 +247,7 @@ export class TiledMapLoader {
                     graphics.destroy();
                 }
                 goal.destroy();
+                features.destroy();
             },
         };
     }
@@ -264,6 +276,11 @@ export class TiledMapLoader {
         }
 
         bodies.push(shape.body);
+
+        // Hedges are low: a ball jumping off a ramp flies over them
+        if (getMaterial(object.properties) === "hedge") {
+            shape.body.collisionFilter.category = HEDGE_CATEGORY;
+        }
 
         // Hidden walls only need their body
         if (object.visible === false) {

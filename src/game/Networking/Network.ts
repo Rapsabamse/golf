@@ -7,6 +7,7 @@ import {
     ServerData,
     BallLocation,
     Vector,
+    DEFAULT_COURSE_ID,
 } from "../../../server/types/types";
 import { RejoinStore, SavedSession } from "./RejoinStore";
 
@@ -32,6 +33,7 @@ export class Network {
     private gameState: GameState;
     private isHost = false;
     private hostId?: string;
+    private courseId = DEFAULT_COURSE_ID;
     /** Saved games still to try when rejoining, after the current attempt. */
     private rejoinQueue?: SavedSession[];
     private rejoinAttempt?: SavedSession;
@@ -260,6 +262,10 @@ export class Network {
                 message.data.state !== undefined
             ) {
                 this.gameState = message.data.state;
+
+                if (message.data.courseId) {
+                    this.courseId = message.data.courseId;
+                }
                 this.onGameStateChange?.(this.gameState, message.data);
             }
         }
@@ -292,8 +298,21 @@ export class Network {
      * Every client reports where the balls stopped. Only the host's result is
      * used, but the server keeps the others in case the host leaves mid-shot.
      */
-    sendSimulationResult(balls: BallLocation[]) {
-        this.send({ type: MessageTypeClient.SIMULATION_DONE, data: balls });
+    /** steps: how long the simulation ran (moves the obstacles on). */
+    sendSimulationResult(balls: BallLocation[], steps: number) {
+        this.send({
+            type: MessageTypeClient.SIMULATION_DONE,
+            data: { locations: balls, steps },
+        });
+    }
+
+    /** Host only: pick the course in the lobby. */
+    selectCourse(courseId: string) {
+        this.send({ type: MessageTypeClient.SELECT_COURSE, data: courseId });
+    }
+
+    getCourseId() {
+        return this.courseId;
     }
 
     sendGoalReached(playerId: string) {

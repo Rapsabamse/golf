@@ -1,9 +1,16 @@
-import { BallLocation, GameState, Player } from "./types/types";
+import {
+    BallLocation,
+    DEFAULT_COURSE_ID,
+    GameState,
+    Player,
+} from "./types/types";
 
 /** What one client reported while simulating a round. */
 export interface SimulationReport {
     goals: Set<string>;
     locations?: BallLocation[];
+    /** Physics steps the simulation took (moves the obstacles on). */
+    steps?: number;
 }
 
 /**
@@ -16,8 +23,12 @@ export interface ServerContext {
     players: Map<string, Player>;
     gameState: GameState;
     hostId: string | undefined;
+    /** The course picked in the lobby. */
+    courseId: string;
     /** Which hole of the current game is being played (0 = first hole). */
     holeIndex: number;
+    /** How far this hole's moving obstacles have run, in physics steps. */
+    courseTime: number;
     ballLocations: BallLocation[];
     playersReady: Set<string>;
     /**
@@ -49,7 +60,9 @@ export function createServerContext(code = ""): ServerContext {
         players: new Map(),
         gameState: GameState.WAITING,
         hostId: undefined,
+        courseId: DEFAULT_COURSE_ID,
         holeIndex: 0,
+        courseTime: 0,
         ballLocations: [],
         playersReady: new Set(),
         simulationReports: new Map(),

@@ -9,7 +9,7 @@ import * as Phaser from "phaser";
 type Point = { x: number; y: number };
 
 /** Walls can say what they are made of with a "material" property in Tiled. */
-export type Material = "rail" | "rock" | "bumper" | "bank" | "plain";
+export type Material = "rail" | "rock" | "bumper" | "bank" | "hedge" | "plain";
 
 const TILE = 40;
 
@@ -276,6 +276,36 @@ export function drawWall(
             break;
         }
 
+        case "hedge": {
+            // A low clipped hedge: lumpy leaves, lit on top (balls jumping
+            // off a ramp clear it; see CourseFeatures)
+            lightEdges(body, points, color, 4);
+            const box = points.reduce(
+                (b, p) => ({
+                    left: Math.min(b.left, p.x),
+                    right: Math.max(b.right, p.x),
+                    top: Math.min(b.top, p.y),
+                    bottom: Math.max(b.bottom, p.y),
+                }),
+                { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity },
+            );
+            const inner = inset(points, 10);
+            for (let y = box.top + 8; y < box.bottom; y += 13) {
+                for (let x = box.left + 8; x < box.right; x += 13) {
+                    const jx = x + ((x * 7 + y * 3) % 5) - 2;
+                    const jy = y + ((x * 3 + y * 5) % 5) - 2;
+                    if (!Phaser.Geom.Polygon.Contains(new Phaser.Geom.Polygon(inner as Phaser.Math.Vector2[]), jx, jy)) {
+                        continue;
+                    }
+                    body.fillStyle(lighten(color, 0.22), 0.9);
+                    body.fillCircle(jx - 1.5, jy - 2, 6);
+                    body.fillStyle(darken(color, 0.25), 0.5);
+                    body.fillCircle(jx + 2, jy + 2.5, 3);
+                }
+            }
+            break;
+        }
+
         case "bank": {
             // Glassy: a pale sheen across the top
             body.fillStyle(lighten(color, 0.3), 0.35);
@@ -459,7 +489,11 @@ export function getMaterial(properties: unknown): Material {
 
     const value = property?.value;
 
-    return value === "rail" || value === "rock" || value === "bumper" || value === "bank"
+    return value === "rail" ||
+        value === "rock" ||
+        value === "bumper" ||
+        value === "bank" ||
+        value === "hedge"
         ? value
         : "plain";
 }

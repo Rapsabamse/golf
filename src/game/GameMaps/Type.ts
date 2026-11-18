@@ -1,8 +1,12 @@
 import * as Phaser from "phaser";
 import { Goal } from "./Goal";
+import { CourseFeatures } from "./CourseFeatures";
 
 export interface GeneratedMap {
     goal: Goal;
+
+    /** Sand, slopes, ramps, tunnels, windmills and sliding blocks. */
+    features: CourseFeatures;
 
     /** The area the course covers, in world coordinates. */
     bounds: Phaser.Geom.Rectangle;

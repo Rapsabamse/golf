@@ -1,12 +1,53 @@
 import { WebSocket } from "ws";
 
+/** A set of holes played in order. The host picks one in the lobby. */
+export interface Course {
+    id: string;
+    name: string;
+    /** One line about it, shown in the lobby. */
+    description: string;
+    /** Map names in play order (files in public/assets/maps). */
+    holes: string[];
+}
+
+const MEADOW = ["map1", "map2", "map6", "map3", "map7", "map4", "map8", "map5", "map9"];
+const FUNFAIR = ["map10", "map11", "map12", "map13", "map14", "map15", "map16", "map17", "map18"];
+
 /**
- * The holes in play order, from the warm-up to the hardest. Shared by the
- * server (which decides which hole is being played) and the client (which
- * loads the map with that name from public/assets/maps).
- *   map1 Warm-up · map2 Dogleg · map3 Pinball · map4 Switchback · map5 Orbit
+ * The courses, shared by the server (which decides which hole is played)
+ * and the client (which loads the maps and shows the choice).
  */
-export const MAPS = ["map1", "map2", "map3", "map4", "map5"];
+export const COURSES: Course[] = [
+    {
+        id: "meadow",
+        name: "Meadow",
+        description: "9 holes of sand, slopes and banks",
+        holes: MEADOW,
+    },
+    {
+        id: "funfair",
+        name: "Funfair",
+        description: "9 holes of windmills, tunnels and jumps",
+        holes: FUNFAIR,
+    },
+    {
+        id: "grand-tour",
+        name: "Grand Tour",
+        description: "All 18 holes",
+        holes: [...MEADOW, ...FUNFAIR],
+    },
+];
+
+export const DEFAULT_COURSE_ID = COURSES[0].id;
+
+export function getCourse(id: string | undefined): Course {
+    return COURSES.find((course) => course.id === id) ?? COURSES[0];
+}
+
+/** Every map any course uses, for loading. */
+export const ALL_MAPS = Array.from(
+    new Set(COURSES.flatMap((course) => course.holes)),
+);
 
 /**
  * Fastest shot the server accepts. Matches the client's aim limit
@@ -42,6 +83,8 @@ export enum MessageTypeClient {
      * takeover? }; takeover (the same tab) may replace a live connection.
      */
     REJOIN_LOBBY,
+    /** Host picks the course in the lobby. Data: course id. */
+    SELECT_COURSE,
 }
 
 export enum MessageTypeServer {
@@ -134,6 +177,14 @@ export interface ServerData {
     lobbyCode?: string;
     /** Why hosting or joining failed (LOBBY_ERROR). */
     error?: string;
+    /** The course being played (or picked, in the lobby). */
+    courseId?: string;
+    /**
+     * Physics steps the moving obstacles (windmills, sliding blocks) have
+     * run on this hole. They only move while balls roll, so every screen
+     * starts each shot with them in the same place.
+     */
+    courseTime?: number;
     /** Sent with CONNECTED: keep it to rejoin after a refresh. */
     rejoinToken?: string;
     /**

@@ -5,6 +5,12 @@ import { GeneratedMap } from "../GameMaps/Type";
 import { SoundEffects } from "./SoundEffects";
 import { FONTS } from "../ui/theme";
 import { BallSkin } from "./BallSkin";
+import {
+    BallCourseState,
+    BallEvent,
+    GRASS_DRAG,
+    newBallCourseState,
+} from "../GameMaps/CourseFeatures";
 
 export interface Ball {
     visual: Phaser.GameObjects.Arc;
@@ -15,6 +21,10 @@ export interface Ball {
     color: number;
     /** The player's catchphrase, shown when the ball drops in. */
     catchphrase: string;
+    /** In the air, settled on a slope, rolling over the cup... */
+    course: BallCourseState;
+    /** Shadow on the ground while the ball is in the air. */
+    shadow: Phaser.GameObjects.Ellipse;
 }
 
 const BALLRADIUS = 12;
@@ -31,6 +41,19 @@ const MIN_BOUNCE_SPEED = 0.8;
 
 const SINK_DURATION_MS = 250;
 
+/** A ball this slow for this many steps on a slope has settled. */
+const SETTLE_SPEED = 0.15;
+const SETTLE_STEPS = 20;
+/** A settled ball knocked faster than this is rolling again. */
+const UNSETTLE_SPEED = 0.6;
+/**
+ * Safety net: a shot that somehow keeps rolling this long (40 s at 60
+ * steps a second) is stopped where it is.
+ */
+const MAX_SIMULATION_STEPS = 2400;
+/** How much bigger a ball looks at the top of a jump. */
+const JUMP_SCALE = 0.7;
+
 export function toCssColor(color: number) {
     return `#${color.toString(16).padStart(6, "0")}`;
 }
@@ -38,6 +61,8 @@ export function toCssColor(color: number) {
 export class BallManager {
     private balls = new Map<string, Ball>();
     private isSimulating = false;
+    /** Physics steps this shot has taken (moves windmills and blocks on). */
+    private simulationSteps = 0;
 
     constructor(
         private readonly scene: Phaser.Scene,
@@ -48,9 +73,11 @@ export class BallManager {
         private readonly sounds: SoundEffects,
     ) {
         scene.matter.world.on("collisionstart", this.handleCollision);
+        scene.matter.world.on("beforeupdate", this.step);
 
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
             scene.matter.world.off("collisionstart", this.handleCollision);
+            scene.matter.world.off("beforeupdate", this.step);
         });
     }
 
@@ -118,6 +145,9 @@ export class BallManager {
                 y: 0,
             });
 
+            // Where the host's shot left it: on the ground, at rest
+            this.resetCourseState(ball);
+
             if (ball.inWorld) {
                 ball.visual.setPosition(location.x, location.y);
                 ball.skin.jumpTo(location.x, location.y);
@@ -162,6 +192,7 @@ export class BallManager {
                     ball.body.position.x,
                     ball.body.position.y,
                 );
+                this.drawJump(ball);
             }
 
             ball.skin.update();
@@ -178,12 +209,168 @@ export class BallManager {
 
             console.log("Sending result");
 
-            this.network.sendSimulationResult(this.getBallPositions());
+            this.network.sendSimulationResult(
+                this.getBallPositions(),
+                this.simulationSteps,
+            );
         }
+    }
+
+    /**
+     * One physics step. While a shot rolls, the course acts on every ball
+     * (sand, slopes, ramps, tunnels, the cup) and the moving pieces move.
+     * Between shots everything stays still.
+     */
+    private step = () => {
+        if (!this.isSimulating) {
+            return;
+        }
+
+        this.simulationSteps += 1;
+        this.gameMap.features.advance();
+
+        for (const ball of this.balls.values()) {
+            if (!ball.inWorld) {
+                continue;
+            }
+
+            const event = this.gameMap.features.applyToBall(ball.body, ball.course);
+            if (event) {
+                this.onCourseEvent(ball, event);
+            }
+
+            // The cup: in the air it's flown over
+            if (ball.course.airborne === 0) {
+                const cup = this.gameMap.goal.check(ball.body, ball.course);
+
+                if (cup === "sink") {
+                    this.handleGoalReached(ball.body);
+                    continue;
+                }
+
+                if (cup === "lip") {
+                    this.showLipOut(ball);
+                }
+            }
+
+            this.settle(ball);
+        }
+
+        if (this.simulationSteps >= MAX_SIMULATION_STEPS) {
+            console.warn("Shot took too long: stopping the balls");
+            for (const ball of this.balls.values()) {
+                this.scene.matter.body.setVelocity(ball.body, { x: 0, y: 0 });
+                this.resetCourseState(ball);
+            }
+        }
+    };
+
+    /**
+     * On a slope a ball never quite stops on its own. One that has barely
+     * moved for a while has settled: it stops, and slopes leave it alone
+     * until something knocks it.
+     */
+    private settle(ball: Ball) {
+        const course = ball.course;
+        const speed = ball.body.speed;
+
+        if (speed > UNSETTLE_SPEED) {
+            course.resting = false;
+        }
+
+        if (speed < SETTLE_SPEED && course.airborne === 0) {
+            course.slowSteps += 1;
+
+            if (course.slowSteps >= SETTLE_STEPS && !course.resting) {
+                course.resting = true;
+                this.scene.matter.body.setVelocity(ball.body, { x: 0, y: 0 });
+            }
+        } else {
+            course.slowSteps = 0;
+        }
+    }
+
+    private onCourseEvent(ball: Ball, event: BallEvent) {
+        switch (event) {
+            case "jumped":
+                this.sounds.jump();
+                break;
+            case "landed":
+                this.sounds.bounce(0.5);
+                break;
+            case "tunnel":
+                // It popped out somewhere else: don't roll it across the map
+                ball.skin.jumpTo(ball.body.position.x, ball.body.position.y);
+                this.sounds.tunnel();
+                break;
+        }
+    }
+
+    /** A ball in the air: bigger at the top of the arc, its shadow left below. */
+    private drawJump(ball: Ball) {
+        const course = ball.course;
+
+        if (course.airborne === 0 || course.airTotal === 0) {
+            if (ball.shadow.visible) {
+                ball.shadow.setVisible(false);
+                ball.visual.setScale(1);
+            }
+            return;
+        }
+
+        const progress = 1 - course.airborne / course.airTotal;
+        const height = Math.sin(progress * Math.PI);
+
+        ball.visual.setScale(1 + JUMP_SCALE * height);
+        ball.shadow
+            .setVisible(true)
+            .setPosition(ball.body.position.x + 6 + height * 22, ball.body.position.y + 9 + height * 30)
+            .setAlpha(0.35 - height * 0.15);
+    }
+
+    private resetCourseState(ball: Ball) {
+        ball.course = newBallCourseState();
+        ball.body.collisionFilter.mask = 0xffffffff;
+        ball.body.frictionAir = GRASS_DRAG;
+        ball.shadow.setVisible(false);
+        ball.visual.setScale(1);
+    }
+
+    /** "Lip out!" over the cup, and a rattle, when a ball is too fast to drop. */
+    private showLipOut(_ball: Ball) {
+        this.sounds.lipOut();
+
+        const hole = this.gameMap.goal.position;
+        const text = this.scene.add
+            .text(hole.x, hole.y - 26, "Lip out!", {
+                fontFamily: FONTS.bold,
+                fontSize: "22px",
+                color: "#ffffff",
+                stroke: "#000000",
+                strokeThickness: 5,
+            })
+            .setOrigin(0.5)
+            .setDepth(1002);
+
+        this.scene.tweens.add({
+            targets: text,
+            y: hole.y - 56,
+            alpha: { from: 1, to: 0 },
+            duration: 900,
+            ease: "Quad.easeOut",
+            onComplete: () => text.destroy(),
+        });
+
+    }
+
+    /** A host's result arrived: this screen's copy of the shot is over. */
+    endSimulation() {
+        this.isSimulating = false;
     }
 
     simulateRound(data: Player[]) {
         this.isSimulating = true;
+        this.simulationSteps = 0;
 
         let strongestShot = 0;
 
@@ -191,6 +378,10 @@ export class BallManager {
         data.forEach((player) => {
             const ball = this.balls.get(player.id);
             if (ball && player.shot?.direction) {
+                // Hit: it's rolling again, even off a slope it settled on
+                ball.course.resting = false;
+                ball.course.slowSteps = 0;
+
                 this.scene.matter.body.setVelocity(
                     ball.body,
                     player.shot.direction,
@@ -232,6 +423,10 @@ export class BallManager {
     setMap(gameMap: GeneratedMap) {
         this.gameMap = gameMap;
         this.isSimulating = false;
+
+        for (const ball of this.balls.values()) {
+            this.resetCourseState(ball);
+        }
     }
 
     private createBall(position: Phaser.Math.Vector2): Ball {
@@ -259,9 +454,14 @@ export class BallManager {
             {
                 restitution: 0.8,
                 friction: 0.1,
-                frictionAir: 0.02,
+                frictionAir: GRASS_DRAG,
             },
         );
+
+        const shadow = this.scene.add
+            .ellipse(position.x, position.y, BALLRADIUS * 2, BALLRADIUS * 1.6, 0x000000, 0.35)
+            .setDepth(999)
+            .setVisible(false);
 
         return {
             visual,
@@ -271,6 +471,8 @@ export class BallManager {
             inWorld: true,
             color: DEFAULT_BALL_COLOR,
             catchphrase: DEFAULT_CATCHPHRASE,
+            course: newBallCourseState(),
+            shadow,
         };
     }
 
@@ -403,6 +605,7 @@ export class BallManager {
         this.scene.tweens.killTweensOf(ball.visual);
 
         ball.visual.destroy();
+        ball.shadow.destroy();
         ball.skin.destroy();
         ball.label.destroy();
 
@@ -428,7 +631,7 @@ export class BallManager {
                 continue;
             }
 
-            if (ball.body.speed > stopThreshold) {
+            if (ball.body.speed > stopThreshold || ball.course.airborne > 0) {
                 return false;
             }
         }

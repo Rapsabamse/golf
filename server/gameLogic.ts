@@ -8,8 +8,8 @@ import {
 import {
     BallLocation,
     GameState,
-    MAPS,
     MessageTypeServer,
+    getCourse,
     Player,
     SHOT_CLOCK_MS,
 } from "./types/types";
@@ -44,7 +44,29 @@ export function broadcastPlayerList(ctx: ServerContext) {
 }
 
 export function getCurrentMapName(ctx: ServerContext) {
-    return MAPS[ctx.holeIndex % MAPS.length];
+    const holes = getCourse(ctx.courseId).holes;
+    return holes[ctx.holeIndex % holes.length];
+}
+
+/** Host picked a course in the lobby: everyone sees the choice. */
+export function selectCourse(ctx: ServerContext, courseId: string) {
+    ctx.courseId = getCourse(courseId).id;
+
+    for (const player of ctx.players.values()) {
+        broadcastSingle(
+            {
+                type: MessageTypeServer.GAME_STATE,
+                data: {
+                    state: GameState.WAITING,
+                    isHost: ctx.hostId === player.id,
+                    mapName: getCurrentMapName(ctx),
+                    hole: 1,
+                    courseId: ctx.courseId,
+                },
+            },
+            player,
+        );
+    }
 }
 
 /** Players taking part in the current round (not waiting to join). */
@@ -126,6 +148,7 @@ function startPlanning(
                     hole: ctx.holeIndex + 1,
                     shouldWait: player.waitingForNextRound,
                     shotClockMs: getShotClockMs(ctx),
+                    courseTime: ctx.courseTime,
                     ...extra,
                 },
             },
@@ -196,6 +219,7 @@ export function startGame(ctx: ServerContext) {
     console.log("Starting planning phase");
 
     ctx.holeIndex = 0;
+    ctx.courseTime = 0;
     ctx.holeMaxShots = [];
     ctx.ballLocations = [];
     clearRoundTracking(ctx);
@@ -216,6 +240,7 @@ export function resetGame(ctx: ServerContext) {
 
     ctx.gameState = GameState.WAITING;
     ctx.holeIndex = 0;
+    ctx.courseTime = 0;
     ctx.holeMaxShots = [];
     ctx.ballLocations = [];
     ctx.currentShots = undefined;
@@ -238,6 +263,7 @@ export function resetGame(ctx: ServerContext) {
                     isHost: ctx.hostId === player.id,
                     mapName: getCurrentMapName(ctx),
                     hole: ctx.holeIndex + 1,
+                    courseId: ctx.courseId,
                 },
             },
             player,
@@ -320,6 +346,7 @@ export function tryStartSimulation(ctx: ServerContext, clockRanOut = false) {
                             : GameState.SIMULATING,
                     playerList: playerList as Player[],
                     shouldWait: player.waitingForNextRound,
+                    courseTime: ctx.courseTime,
                 },
             },
             player,
@@ -340,12 +367,15 @@ export function tryStartSimulation(ctx: ServerContext, clockRanOut = false) {
 export function finishSimulation(
     ctx: ServerContext,
     locations: BallLocation[],
+    steps = 0,
 ) {
     if (ctx.gameState !== GameState.SIMULATING) {
         return;
     }
 
     ctx.ballLocations = locations;
+    // Obstacles carry on from where the host's simulation left them
+    ctx.courseTime += steps;
     ctx.currentShots = undefined;
 
     console.log("broadcasting ball-locations");
@@ -411,7 +441,8 @@ export function tryCompleteRound(ctx: ServerContext) {
         return;
     }
 
-    const wasLastHole = ctx.holeIndex + 1 >= MAPS.length;
+    const wasLastHole =
+        ctx.holeIndex + 1 >= getCourse(ctx.courseId).holes.length;
 
     ctx.ballLocations = [];
     ctx.currentShots = undefined;
@@ -451,6 +482,7 @@ export function tryCompleteRound(ctx: ServerContext) {
     }
 
     ctx.holeIndex += 1;
+    ctx.courseTime = 0;
     ctx.gameState = GameState.ROUND_COMPLETE;
 
     broadcast(
@@ -501,7 +533,7 @@ export function resumeWithNewHost(ctx: ServerContext) {
         }
 
         if (report.locations) {
-            finishSimulation(ctx, report.locations);
+            finishSimulation(ctx, report.locations, report.steps);
         }
     } else if (
         ctx.gameState === GameState.ROUND_COMPLETE &&

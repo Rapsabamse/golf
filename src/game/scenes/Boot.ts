@@ -1,5 +1,5 @@
 import { Scene } from "phaser";
-import { MAPS } from "../../../server/types/types";
+import { ALL_MAPS } from "../../../server/types/types";
 
 export class Boot extends Scene {
     constructor() {
@@ -13,8 +13,8 @@ export class Boot extends Scene {
         //  The sky, grass, walls and cup are all drawn in code
         //  (scenes/Backdrop.ts, GameMaps/CourseArt.ts), so only the maps load here.
 
-        // One map per hole, in play order (see MAPS in server/types/types.ts)
-        for (const map of MAPS) {
+        // Every hole of every course (see COURSES in server/types/types.ts)
+        for (const map of ALL_MAPS) {
             this.load.tilemapTiledJSON(map, `assets/maps/${map}.json`);
         }
     }

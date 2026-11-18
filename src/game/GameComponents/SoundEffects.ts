@@ -50,6 +50,24 @@ export class SoundEffects {
         this.tone(990, 0.35, 0.25, "sine", 0.38);
     }
 
+    /** Ball takes off from a ramp: a rising whoosh. */
+    jump() {
+        this.noise(0.12, 0.12, 1800);
+        this.tone(300, 0.22, 0.12, "sine", 0, 700);
+    }
+
+    /** Ball drops into a tunnel and comes out the other end. */
+    tunnel() {
+        this.tone(180, 0.12, 0.18, "triangle", 0, 90);
+        this.tone(240, 0.1, 0.12, "triangle", 0.16, 320);
+    }
+
+    /** Ball catches the rim and rolls on: a quick metallic rattle. */
+    lipOut() {
+        this.tone(1500, 0.03, 0.1, "square", 0);
+        this.tone(1300, 0.03, 0.08, "square", 0.05);
+    }
+
     /** Soft tick for each of the last seconds on the shot clock. */
     clockTick() {
         this.tone(1800, 0.03, 0.07, "square", 0);

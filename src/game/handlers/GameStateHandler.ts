@@ -87,6 +87,18 @@ export class GameStateHandler {
             this.showCourseState(data.courseState);
         }
 
+        // A new shot: whatever this screen was still simulating is replaced
+        // by the host's result, and windmills and sliding blocks go to where
+        // the host's shot left them (every screen starts the next shot from
+        // the same place)
+        if (gamestate === GameState.PLANNING) {
+            this.ballManager.endSimulation();
+        }
+
+        if (data?.courseTime !== undefined) {
+            this.currentMap.features.setTime(data.courseTime);
+        }
+
         switch (gamestate) {
             case GameState.WAITING:
                 this.handleWaiting(data);
@@ -286,13 +298,6 @@ export class GameStateHandler {
         this.currentMapName = mapName;
 
         this.ballManager.setMap(map);
-        this.setupGoal();
-    }
-
-    private setupGoal() {
-        this.currentMap.goal.setOnBallEntered((ballBody) => {
-            this.ballManager.handleGoalReached(ballBody);
-        });
     }
 
     /**

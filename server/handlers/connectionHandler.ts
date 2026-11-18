@@ -132,6 +132,7 @@ export function handleRejoin(
                     state: GameState.SIMULATING_HOST,
                     playerList: ctx.currentShots as Player[],
                     shouldWait: player.waitingForNextRound,
+                    courseTime: ctx.courseTime,
                 },
             },
             player,
@@ -192,6 +193,8 @@ function sendWelcome(ctx: ServerContext, player: Player) {
                 mapName: getCurrentMapName(ctx),
                 hole: ctx.holeIndex + 1,
                 lobbyCode: ctx.code,
+                courseId: ctx.courseId,
+                courseTime: ctx.courseTime,
                 courseState,
                 shotClockMs:
                     ctx.gameState === GameState.PLANNING

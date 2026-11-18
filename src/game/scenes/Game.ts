@@ -60,11 +60,6 @@ export class Game extends Phaser.Scene {
             this.sounds,
         );
 
-        //Connect the ball entered goal event with hadleGoalReached on the ballmanager
-        this.currentMap.goal.setOnBallEntered((ballBody) => {
-            this.ballManager.handleGoalReached(ballBody);
-        });
-
         //Create inputs
         this.aimController = new AimController(
             this,

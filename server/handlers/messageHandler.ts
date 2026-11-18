@@ -1,6 +1,7 @@
 import { RawData } from "ws";
 import {
     BallLocation,
+    COURSES,
     GameState,
     MAX_SHOT_SPEED,
     MessageTypeClient,
@@ -16,6 +17,7 @@ import {
     finishSimulation,
     startGame,
     resetGame,
+    selectCourse,
     tryStartSimulation,
 } from "../gameLogic";
 
@@ -62,6 +64,18 @@ export function handleMessages(
             }
             break;
         }
+
+        // The host picks the course in the lobby
+        case MessageTypeClient.SELECT_COURSE:
+            if (
+                ctx.gameState === GameState.WAITING &&
+                isHost &&
+                typeof message.data === "string" &&
+                COURSES.some((course) => course.id === message.data)
+            ) {
+                selectCourse(ctx, message.data);
+            }
+            break;
 
         // The host starts the game from the lobby
         case MessageTypeClient.START_GAME:
@@ -128,11 +142,20 @@ export function handleMessages(
                 return;
             }
 
-            const locations = parseLocations(message.data);
-            getReport(ctx, playerId).locations = locations;
+            // { locations, steps }, or just the locations from older clients
+            const result =
+                message.data && !Array.isArray(message.data)
+                    ? (message.data as { locations?: unknown; steps?: unknown })
+                    : { locations: message.data };
+            const locations = parseLocations(result.locations);
+            const steps = parseSteps(result.steps);
+
+            const report = getReport(ctx, playerId);
+            report.locations = locations;
+            report.steps = steps;
 
             if (isHost) {
-                finishSimulation(ctx, locations);
+                finishSimulation(ctx, locations, steps);
             }
             break;
         }
@@ -201,6 +224,13 @@ function parseShot(data: unknown): Vector | undefined {
     const scale = length > MAX_SHOT_SPEED ? MAX_SHOT_SPEED / length : 1;
 
     return { x: x * scale, y: y * scale };
+}
+
+/** A simulation's length in physics steps: a whole number, within reason. */
+function parseSteps(data: unknown): number {
+    return typeof data === "number" && Number.isFinite(data)
+        ? Math.max(0, Math.min(100_000, Math.round(data)))
+        : 0;
 }
 
 function parseLocations(data: unknown): BallLocation[] {
