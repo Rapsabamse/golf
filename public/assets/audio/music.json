@@ -1,23 +1,76 @@
 {
-  "title": "Hole in Fun",
-  "sampleRate": 44100,
-  "pad": 22050,
-  "parts": [
+  "tracks": [
     {
-      "file": "battle-1.mp3",
-      "samples": 1984500
+      "id": "disco",
+      "title": "Hole in Fun",
+      "sampleRate": 44100,
+      "pad": 22050,
+      "parts": [
+        {
+          "file": "disco-1.mp3",
+          "samples": 1984500
+        },
+        {
+          "file": "disco-2.mp3",
+          "samples": 1984500
+        },
+        {
+          "file": "disco-3.mp3",
+          "samples": 1984500
+        },
+        {
+          "file": "disco-4.mp3",
+          "samples": 1984500
+        }
+      ]
     },
     {
-      "file": "battle-2.mp3",
-      "samples": 1984500
+      "id": "synthwave",
+      "title": "Neon Fairway",
+      "sampleRate": 44100,
+      "pad": 22050,
+      "parts": [
+        {
+          "file": "synthwave-1.mp3",
+          "samples": 1512000
+        },
+        {
+          "file": "synthwave-2.mp3",
+          "samples": 1512000
+        },
+        {
+          "file": "synthwave-3.mp3",
+          "samples": 1512000
+        },
+        {
+          "file": "synthwave-4.mp3",
+          "samples": 1512000
+        }
+      ]
     },
     {
-      "file": "battle-3.mp3",
-      "samples": 1984500
-    },
-    {
-      "file": "battle-4.mp3",
-      "samples": 1984500
+      "id": "eurobeat",
+      "title": "Hole in One Rush",
+      "sampleRate": 44100,
+      "pad": 22050,
+      "parts": [
+        {
+          "file": "eurobeat-1.mp3",
+          "samples": 1628308
+        },
+        {
+          "file": "eurobeat-2.mp3",
+          "samples": 1628307
+        },
+        {
+          "file": "eurobeat-3.mp3",
+          "samples": 1628308
+        },
+        {
+          "file": "eurobeat-4.mp3",
+          "samples": 1628308
+        }
+      ]
     }
   ]
 }

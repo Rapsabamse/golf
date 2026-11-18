@@ -1,17 +1,15 @@
 import { SoundEffects } from "./SoundEffects";
 
 /**
- * "Hole in Fun", the battle music (made by tools/battle-music.py).
+ * The battle music: three tracks (made by tools/music), played in a
+ * random order during matches. When a track ends, a different one picked
+ * at random fades in over it; the same track never plays twice in a row.
  *
- * It's three minutes long, so it comes in parts that are played one after
- * another and loop back to the first: decoding the whole song at once
- * would take around 70 MB. Only the part playing and the next one are
- * kept in memory, and the next is fetched while the current one plays.
- *
- * Each part's file has half a second of its neighbours before and after
- * it. A part starts from its padding and plays exactly its own length, so
- * parts join without a gap, and a short crossfade into the next part's
- * identical padding hides any rounding at the join.
+ * Each track comes in parts that are played one after another, so only
+ * the part playing and the next one are decoded in memory. Each part's
+ * file has half a second of its neighbours before and after it: a part
+ * starts from its padding and plays exactly its own length, so parts of a
+ * track join without a gap (a tiny crossfade hides any rounding).
  */
 const MUSIC_FOLDER = "assets/audio/";
 const MANIFEST_URL = MUSIC_FOLDER + "music.json";
@@ -20,47 +18,67 @@ const MANIFEST_URL = MUSIC_FOLDER + "music.json";
 const VOLUME = 0.32;
 const FADE_IN = 1.5;
 const FADE_OUT = 0.6;
-/** Overlap between parts, in seconds (well inside the padding). */
-const CROSSFADE = 0.02;
+/** Overlap between parts of a track, in seconds (well inside the padding). */
+const PART_JOIN = 0.02;
+/** One track fades into the next over this long. */
+const TRACK_CROSSFADE = 4;
 /** Schedule the next part this long before it's due. */
-const LOOKAHEAD = 5;
+const LOOKAHEAD = 6;
 
 /** Whether the player wants music, remembered between visits. */
 const STORAGE_KEY = "golf.music";
 
-interface Manifest {
+interface Track {
+    id: string;
+    title: string;
     sampleRate: number;
     /** Samples of padding at each end of every part's file. */
     pad: number;
     parts: { file: string; samples: number }[];
 }
 
-/** What's playing right now. */
+interface Manifest {
+    tracks: Track[];
+}
+
+/** Where we are in the music. */
+interface Position {
+    track: number;
+    part: number;
+}
+
+/** How a part begins: from silence, joined to the last part, or fading in over the last track. */
+type Entry = "start" | "join" | "crossfade";
+
 interface Playback {
     context: AudioContext;
     /** The music's own volume, for fading in and out. */
     output: GainNode;
     sources: AudioBufferSourceNode[];
-    /** The part that's playing, and when the next one starts. */
-    part: number;
+    /** The part playing now, and the next one and when it starts. */
+    current: Position;
+    next: Position;
+    nextEntry: Entry;
     nextStart: number;
     timer?: ReturnType<typeof setTimeout>;
 }
 
 /**
- * Plays the battle music on a loop during matches. It's silent in the
- * lobby, when the player turns music off (N), or mutes all sound (M).
+ * Plays the battle music during matches. It's silent in the lobby, when
+ * the player turns music off (N), or mutes all sound (M).
  */
 export class Music {
     private manifest?: Promise<Manifest | undefined>;
-    private buffers = new Map<number, Promise<AudioBuffer | undefined>>();
+    private buffers = new Map<string, Promise<AudioBuffer | undefined>>();
     private playback?: Playback;
     private starting = false;
     /** The game is in a match, where music belongs. */
     private inMatch = false;
     private enabled = readEnabled();
     /** Where to carry on after the music was paused (N or M). */
-    private resumePart = 0;
+    private resumeAt?: Position;
+    /** The last track played, so the next pick is a different one. */
+    private lastTrack = -1;
 
     constructor(private readonly sounds: SoundEffects) {}
 
@@ -84,9 +102,9 @@ export class Music {
 
     /** Call when the game state changes: music during matches only. */
     setInMatch(inMatch: boolean) {
-        // A new match starts from the top of the song
+        // A new match starts a new track from the top
         if (inMatch && !this.inMatch) {
-            this.resumePart = 0;
+            this.resumeAt = undefined;
         }
 
         this.inMatch = inMatch;
@@ -112,6 +130,17 @@ export class Music {
         return this.inMatch && this.enabled && !this.sounds.isMuted();
     }
 
+    /** A random track, never the one just played (unless there's only one). */
+    private pickTrack(manifest: Manifest, notThis: number): number {
+        const count = manifest.tracks.length;
+        if (count <= 1) {
+            return 0;
+        }
+
+        const choices = [...Array(count).keys()].filter((i) => i !== notThis);
+        return choices[Math.floor(Math.random() * choices.length)];
+    }
+
     private async start() {
         if (this.playback || this.starting) {
             return;
@@ -124,12 +153,14 @@ export class Music {
 
         this.starting = true;
         const manifest = await this.loadManifest();
-        const part = manifest ? this.resumePart % manifest.parts.length : 0;
-        const buffer = manifest ? await this.loadPart(context, manifest, part) : undefined;
+        const at: Position | undefined = manifest && manifest.tracks.length > 0
+            ? this.resumeAt ?? { track: this.pickTrack(manifest, this.lastTrack), part: 0 }
+            : undefined;
+        const buffer = manifest && at ? await this.loadPart(context, manifest, at) : undefined;
         this.starting = false;
 
         // Settings may have changed while it loaded
-        if (!manifest || !buffer || this.playback || !this.shouldPlay()) {
+        if (!manifest || !at || !buffer || this.playback || !this.shouldPlay()) {
             return;
         }
 
@@ -139,17 +170,25 @@ export class Music {
         output.gain.exponentialRampToValueAtTime(VOLUME, now + FADE_IN);
         output.connect(context.destination);
 
-        this.playback = { context, output, sources: [], part, nextStart: now };
-        this.playPart(manifest, part, buffer, now + 0.05, true);
+        this.playback = {
+            context,
+            output,
+            sources: [],
+            current: at,
+            next: at,
+            nextEntry: "start",
+            nextStart: now,
+        };
+        this.playPart(manifest, at, buffer, now + 0.05, "start");
     }
 
-    /** Schedule one part to start at `when`, and the next one after it. */
+    /** Schedule one part to start at `when`, and line up whatever follows it. */
     private playPart(
         manifest: Manifest,
-        part: number,
+        at: Position,
         buffer: AudioBuffer,
         when: number,
-        first: boolean,
+        entry: Entry,
     ) {
         const playback = this.playback;
         if (!playback) {
@@ -157,23 +196,57 @@ export class Music {
         }
 
         const { context } = playback;
-        const length = manifest.parts[part].samples / manifest.sampleRate;
-        const pad = manifest.pad / manifest.sampleRate;
-        // The first part just starts; later ones fade in over the last one's tail
-        const lead = first ? 0 : CROSSFADE;
+        const track = manifest.tracks[at.track];
+        const length = track.parts[at.part].samples / track.sampleRate;
+        const pad = track.pad / track.sampleRate;
+        const lastPart = at.part === track.parts.length - 1;
 
         const fade = context.createGain();
         fade.connect(playback.output);
-        fade.gain.setValueAtTime(first ? 1 : 0, when - lead);
-        fade.gain.linearRampToValueAtTime(1, when);
-        fade.gain.setValueAtTime(1, when + length);
-        fade.gain.linearRampToValueAtTime(0, when + length + CROSSFADE);
+
+        // How it comes in
+        let startAt = when;
+        let offset = pad;
+        if (entry === "join") {
+            startAt = when - PART_JOIN;
+            offset = pad - PART_JOIN;
+            fade.gain.setValueAtTime(0, startAt);
+            fade.gain.linearRampToValueAtTime(1, when);
+        } else if (entry === "crossfade") {
+            // (A curve can't share its start time with another change)
+            fade.gain.setValueCurveAtTime(equalPowerCurve(true), when, TRACK_CROSSFADE);
+        } else {
+            fade.gain.setValueAtTime(1, when);
+        }
+
+        // How it goes out: into the next part, or fading under the next track
+        const end = when + length;
+        let next: Position;
+        let nextEntry: Entry;
+        let nextStart: number;
+        let stopAt: number;
+
+        if (lastPart) {
+            const fadeStart = end - TRACK_CROSSFADE;
+            fade.gain.setValueCurveAtTime(equalPowerCurve(false), fadeStart, TRACK_CROSSFADE);
+            next = { track: this.pickTrack(manifest, at.track), part: 0 };
+            nextEntry = "crossfade";
+            nextStart = fadeStart;
+            stopAt = end + 0.05;
+        } else {
+            fade.gain.setValueAtTime(1, end);
+            fade.gain.linearRampToValueAtTime(0, end + PART_JOIN);
+            next = { track: at.track, part: at.part + 1 };
+            nextEntry = "join";
+            nextStart = end;
+            stopAt = end + PART_JOIN + 0.01;
+        }
 
         const source = context.createBufferSource();
         source.buffer = buffer;
         source.connect(fade);
-        source.start(when - lead, pad - lead);
-        source.stop(when + length + CROSSFADE + 0.01);
+        source.start(startAt, offset);
+        source.stop(stopAt);
         source.onended = () => {
             source.disconnect();
             fade.disconnect();
@@ -181,26 +254,30 @@ export class Music {
         };
 
         playback.sources.push(source);
-        playback.part = part;
-        playback.nextStart = when + length;
+        playback.current = at;
+        playback.next = next;
+        playback.nextEntry = nextEntry;
+        playback.nextStart = nextStart;
+        this.lastTrack = at.track;
 
-        // Keep just this part and the next in memory
-        const next = (part + 1) % manifest.parts.length;
-        for (const index of this.buffers.keys()) {
-            if (index !== part && index !== next) {
-                this.buffers.delete(index);
+        // Keep just this part and the next decoded
+        const keep = new Set([key(at), key(next)]);
+        for (const k of this.buffers.keys()) {
+            if (!keep.has(k)) {
+                this.buffers.delete(k);
             }
         }
         void this.loadPart(context, manifest, next);
 
-        const wait = Math.max(0, playback.nextStart - context.currentTime - LOOKAHEAD);
+        const wait = Math.max(0, nextStart - context.currentTime - LOOKAHEAD);
         playback.timer = setTimeout(() => {
-            void this.queueNext(manifest, playback, next);
+            void this.queueNext(manifest, playback);
         }, wait * 1000);
     }
 
-    private async queueNext(manifest: Manifest, playback: Playback, part: number) {
-        const buffer = await this.loadPart(playback.context, manifest, part);
+    private async queueNext(manifest: Manifest, playback: Playback) {
+        const { next, nextEntry, nextStart } = playback;
+        const buffer = await this.loadPart(playback.context, manifest, next);
 
         // Stopped meanwhile, or the next part couldn't be loaded
         if (this.playback !== playback || !buffer) {
@@ -209,8 +286,14 @@ export class Music {
 
         // If it arrived late (a slow connection), start it as soon as we can
         const earliest = playback.context.currentTime + 0.05;
-        const late = playback.nextStart < earliest;
-        this.playPart(manifest, part, buffer, Math.max(playback.nextStart, earliest), late);
+        const late = nextStart < earliest;
+        this.playPart(
+            manifest,
+            next,
+            buffer,
+            Math.max(nextStart, earliest),
+            late && nextEntry === "join" ? "start" : nextEntry,
+        );
     }
 
     private stop(fade = FADE_OUT) {
@@ -221,7 +304,7 @@ export class Music {
             return;
         }
 
-        this.resumePart = playback.part;
+        this.resumeAt = playback.current;
         clearTimeout(playback.timer);
 
         const { context, output } = playback;
@@ -264,12 +347,13 @@ export class Music {
     private loadPart(
         context: AudioContext,
         manifest: Manifest,
-        part: number,
+        at: Position,
     ): Promise<AudioBuffer | undefined> {
-        let loading = this.buffers.get(part);
+        let loading = this.buffers.get(key(at));
 
         if (!loading) {
-            loading = fetch(MUSIC_FOLDER + manifest.parts[part].file)
+            const file = manifest.tracks[at.track].parts[at.part].file;
+            loading = fetch(MUSIC_FOLDER + file)
                 .then((response) => {
                     if (!response.ok) {
                         throw new Error(`${response.status}`);
@@ -278,16 +362,31 @@ export class Music {
                 })
                 .then((data) => context.decodeAudioData(data))
                 .catch((error) => {
-                    console.warn(`Couldn't load part ${part + 1} of the music:`, error);
-                    this.buffers.delete(part);
+                    console.warn(`Couldn't load ${file}:`, error);
+                    this.buffers.delete(key(at));
                     return undefined;
                 });
 
-            this.buffers.set(part, loading);
+            this.buffers.set(key(at), loading);
         }
 
         return loading;
     }
+}
+
+function key(at: Position) {
+    return `${at.track}:${at.part}`;
+}
+
+/** Equal-power fade: keeps the loudness steady while two tracks overlap. */
+function equalPowerCurve(fadeIn: boolean): Float32Array {
+    const steps = 64;
+    const curve = new Float32Array(steps);
+    for (let i = 0; i < steps; i++) {
+        const x = i / (steps - 1);
+        curve[i] = fadeIn ? Math.sin((x * Math.PI) / 2) : Math.cos((x * Math.PI) / 2);
+    }
+    return curve;
 }
 
 function readEnabled() {

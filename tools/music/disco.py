@@ -18,21 +18,13 @@ the kick, and the intro and breakdown open up with a filter sweep.
     Chorus 2   16  twin guitars on the melody, swapping parts halfway
     Outro      16  weaving arpeggios, the hook in harmony, a last duel
 
-Everything is synthesised here with numpy: no samples. Effects and ringing
-notes that run past the end are folded back onto the start, so the loop has
-no seam. The game streams it in 4 parts of 24 bars:
+Everything is synthesised here with numpy: no samples. It swells in over
+the first bars and eases out over the last, so the game can crossfade it
+with the other tracks. The game streams it in 4 parts of 24 bars:
 
-    python3 tools/battle-music.py out-folder
+    python3 tools/music/disco.py out-folder
 
-writes battle-1.wav ... battle-4.wav (each with half a second of its
-neighbours as padding) and music.json. Encode them for the game with ffmpeg:
-
-    for f in out-folder/battle-*.wav; do
-        ffmpeg -i "$f" -codec:a libmp3lame -b:a 160k "public/assets/audio/$(basename "${f%.wav}").mp3"
-    done
-    cp out-folder/music.json public/assets/audio/
-
-(needs Python with numpy and scipy).
+(see tools/music/README.md for building all the tracks).
 """
 
 import json
@@ -977,6 +969,13 @@ def render():
         looped[:TAIL] += ch[LOOP:]
         out.append(looped)
     master = np.stack(out, axis=1)
+    # Swell in over the first four bars and ease out over the last four,
+    # for crossfading with the other tracks
+    fade = np.ones(LOOP)
+    edge = at(4 * 16)
+    fade[:edge] = 0.2 + 0.8 * np.linspace(0, 1, edge) ** 1.5
+    fade[-edge:] = 0.2 + 0.8 * np.linspace(1, 0, edge) ** 1.5
+    master *= fade[:, None]
     # A little sheen on top: disco should sparkle
     for i in range(2):
         master[:, i] += 0.5 * filt(master[:, i], "highpass", 6000)
@@ -991,13 +990,14 @@ if __name__ == "__main__":
     folder = sys.argv[1]
     os.makedirs(folder, exist_ok=True)
     audio = (render() * 32767).astype(np.int16)
-    wavfile.write(os.path.join(folder, "full.wav"), SR, audio)
+    wavfile.write(os.path.join(folder, "disco-full.wav"), SR, audio)
     parts = []
     for i in range(PARTS):
         a, b = at(i * BARS_PER_PART * 16), at((i + 1) * BARS_PER_PART * 16)
         idx = np.arange(a - PAD, b + PAD) % LOOP
-        wavfile.write(os.path.join(folder, f"battle-{i + 1}.wav"), SR, audio[idx])
-        parts.append({"file": f"battle-{i + 1}.mp3", "samples": b - a})
-    with open(os.path.join(folder, "music.json"), "w") as f:
-        json.dump({"title": "Hole in Fun", "sampleRate": SR, "pad": PAD, "parts": parts}, f, indent=2)
-    print(f"song: {LOOP} samples = {LOOP / SR:.3f} s in {PARTS} parts")
+        wavfile.write(os.path.join(folder, f"disco-{i + 1}.wav"), SR, audio[idx])
+        parts.append({"file": f"disco-{i + 1}.mp3", "samples": b - a})
+    entry = {"id": "disco", "title": "Hole in Fun", "sampleRate": SR, "pad": PAD, "parts": parts}
+    with open(os.path.join(folder, "disco.json"), "w") as f:
+        json.dump(entry, f, indent=2)
+    print(f"Hole in Fun: {LOOP / SR:.1f} s in {PARTS} parts")
