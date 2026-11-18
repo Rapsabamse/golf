@@ -5,6 +5,7 @@ import { GeneratedMap } from "../GameMaps/Type";
 import { SoundEffects } from "./SoundEffects";
 import { FONTS } from "../ui/theme";
 import { BallSkin } from "./BallSkin";
+import { ShotTrails } from "./ShotTrails";
 import {
     BallCourseState,
     BallEvent,
@@ -63,6 +64,8 @@ export class BallManager {
     private isSimulating = false;
     /** Physics steps this shot has taken (moves windmills and blocks on). */
     private simulationSteps = 0;
+    /** The path each ball took on the last shot. */
+    private readonly trails: ShotTrails;
 
     constructor(
         private readonly scene: Phaser.Scene,
@@ -75,7 +78,10 @@ export class BallManager {
         scene.matter.world.on("collisionstart", this.handleCollision);
         scene.matter.world.on("beforeupdate", this.step);
 
+        this.trails = new ShotTrails(scene);
+
         scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+            this.trails.destroy();
             scene.matter.world.off("collisionstart", this.handleCollision);
             scene.matter.world.off("beforeupdate", this.step);
         });
@@ -89,6 +95,7 @@ export class BallManager {
             if (!playerIds.has(playerId) || clear) {
                 this.destroyBall(ball);
                 this.balls.delete(playerId);
+                this.trails.remove(playerId);
             }
         }
 
@@ -123,6 +130,7 @@ export class BallManager {
             if (!playerIds.has(playerId)) {
                 this.destroyBall(ball);
                 this.balls.delete(playerId);
+                this.trails.remove(playerId);
             }
         }
     }
@@ -144,6 +152,9 @@ export class BallManager {
                 x: 0,
                 y: 0,
             });
+
+            // The line ends where the host's shot left the ball
+            this.trails.finish(location.playerId, location.x, location.y);
 
             // Where the host's shot left it: on the ground, at rest
             this.resetCourseState(ball);
@@ -204,6 +215,8 @@ export class BallManager {
             ball.label.setVisible(ball.inWorld && ball.visual.visible);
         }
 
+        this.trails.update();
+
         if (this.isSimulating && this.areAllBallsStopped()) {
             this.isSimulating = false;
 
@@ -229,12 +242,23 @@ export class BallManager {
         this.simulationSteps += 1;
         this.gameMap.features.advance();
 
-        for (const ball of this.balls.values()) {
+        for (const [playerId, ball] of this.balls) {
             if (!ball.inWorld) {
                 continue;
             }
 
+            this.trails.record(
+                playerId,
+                ball.body.position.x,
+                ball.body.position.y,
+                ball.color,
+                ball.course.airborne > 0,
+            );
+
             const event = this.gameMap.features.applyToBall(ball.body, ball.course);
+            if (event === "tunnel") {
+                this.trails.breakTrail(playerId);
+            }
             if (event) {
                 this.onCourseEvent(ball, event);
             }
@@ -372,6 +396,9 @@ export class BallManager {
         this.isSimulating = true;
         this.simulationSteps = 0;
 
+        // A new shot: last shot's lines go
+        this.trails.clear();
+
         let strongestShot = 0;
 
         //Go through each ball and add the velocity send by the server
@@ -423,6 +450,7 @@ export class BallManager {
     setMap(gameMap: GeneratedMap) {
         this.gameMap = gameMap;
         this.isSimulating = false;
+        this.trails.clear();
 
         for (const ball of this.balls.values()) {
             this.resetCourseState(ball);
