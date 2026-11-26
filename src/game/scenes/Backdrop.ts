@@ -7,6 +7,11 @@ import { onResize } from "../ui/layout";
  * nebula haze, two layers of stars that drift a little as the course camera
  * moves, and a few stars that twinkle. It runs as its own scene underneath
  * the menu and the game, so the camera zoom never changes it.
+ *
+ * The gradient and both star layers are painted together into one
+ * screen-sized picture, repainted only when the stars have actually moved.
+ * Drawing three full-screen layers every frame made the sky the most
+ * expensive thing in the game.
  */
 
 const GRADIENT = "backdrop-gradient";
@@ -19,6 +24,8 @@ const FAR_PARALLAX = 0.04;
 const NEAR_PARALLAX = 0.1;
 /** Slow drift when no course is on screen (menu, loading). */
 const DRIFT_PER_SECOND = 4;
+/** Repaint the sky once the near stars have moved this far (pixels). */
+const REPAINT_STEP = 0.5;
 
 const TWINKLES = 14;
 
@@ -30,12 +37,53 @@ function seededRandom(seed: number) {
     };
 }
 
+/** A star tile repeated to cover the screen, scrolled for parallax. Painted into the sky, never drawn itself. */
+class StarLayer {
+    readonly images: Phaser.GameObjects.Image[] = [];
+    private columns = 0;
+
+    constructor(
+        private readonly scene: Phaser.Scene,
+        private readonly key: string,
+    ) {}
+
+    /** Enough tiles to cover the screen however it's scrolled. */
+    setSize(width: number, height: number) {
+        this.columns = Math.ceil(width / STAR_TILE) + 1;
+        const count = this.columns * (Math.ceil(height / STAR_TILE) + 1);
+
+        while (this.images.length < count) {
+            this.images.push(new Phaser.GameObjects.Image(this.scene, 0, 0, this.key).setOrigin(0));
+        }
+        while (this.images.length > count) {
+            this.images.pop()!.destroy();
+        }
+    }
+
+    /** Show the tile from (x, y) at the top-left of the screen, repeating. */
+    scrollTo(x: number, y: number) {
+        const left = -(((x % STAR_TILE) + STAR_TILE) % STAR_TILE);
+        const top = -(((y % STAR_TILE) + STAR_TILE) % STAR_TILE);
+
+        this.images.forEach((image, i) => {
+            image.setPosition(
+                left + (i % this.columns) * STAR_TILE,
+                top + Math.floor(i / this.columns) * STAR_TILE,
+            );
+        });
+    }
+}
+
 export class Backdrop extends Scene {
+    /** The gradient and both star layers, painted together. */
+    private sky!: Phaser.GameObjects.RenderTexture;
     private gradient!: Phaser.GameObjects.Image;
-    private farStars!: Phaser.GameObjects.TileSprite;
-    private nearStars!: Phaser.GameObjects.TileSprite;
+    private farStars!: StarLayer;
+    private nearStars!: StarLayer;
     private twinkles: Phaser.GameObjects.Arc[] = [];
     private drift = 0;
+    /** Where the near stars were when the sky was last painted. */
+    private paintedAt?: { x: number; y: number };
 
     constructor() {
         super("Backdrop");
@@ -44,9 +92,10 @@ export class Backdrop extends Scene {
     create() {
         this.createTextures();
 
-        this.gradient = this.add.image(0, 0, GRADIENT).setOrigin(0);
-        this.farStars = this.add.tileSprite(0, 0, 1, 1, FAR_STARS).setOrigin(0);
-        this.nearStars = this.add.tileSprite(0, 0, 1, 1, NEAR_STARS).setOrigin(0);
+        this.sky = this.add.renderTexture(0, 0, this.scale.width, this.scale.height).setOrigin(0);
+        this.gradient = new Phaser.GameObjects.Image(this, 0, 0, GRADIENT).setOrigin(0);
+        this.farStars = new StarLayer(this, FAR_STARS);
+        this.nearStars = new StarLayer(this, NEAR_STARS);
 
         this.createTwinkles();
         this.layout();
@@ -70,17 +119,43 @@ export class Backdrop extends Scene {
             y = this.drift * 4;
         }
 
-        this.farStars.setTilePosition(x * FAR_PARALLAX, y * FAR_PARALLAX);
-        this.nearStars.setTilePosition(x * NEAR_PARALLAX, y * NEAR_PARALLAX);
+        this.paint(x, y);
+    }
+
+    /** Repaint the sky if the stars have moved enough to notice. */
+    private paint(x: number, y: number) {
+        const nearX = x * NEAR_PARALLAX;
+        const nearY = y * NEAR_PARALLAX;
+        const last = this.paintedAt;
+
+        if (
+            last &&
+            Math.abs(nearX - last.x) < REPAINT_STEP &&
+            Math.abs(nearY - last.y) < REPAINT_STEP
+        ) {
+            return;
+        }
+        this.paintedAt = { x: nearX, y: nearY };
+
+        this.farStars.scrollTo(x * FAR_PARALLAX, y * FAR_PARALLAX);
+        this.nearStars.scrollTo(nearX, nearY);
+
+        this.sky
+            .clear()
+            .draw([this.gradient, ...this.farStars.images, ...this.nearStars.images])
+            .render();
     }
 
     private layout() {
         const { width, height } = this.scale;
 
         this.cameras.main.setSize(width, height);
+        this.sky.resize(width, height);
         this.gradient.setDisplaySize(width, height);
         this.farStars.setSize(width, height);
         this.nearStars.setSize(width, height);
+        // Repaint at the new size on the next update
+        this.paintedAt = undefined;
 
         // Keep the twinkling stars spread over the whole screen
         const random = seededRandom(99);

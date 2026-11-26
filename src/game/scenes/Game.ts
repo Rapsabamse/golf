@@ -37,7 +37,18 @@ export class Game extends Phaser.Scene {
     private scoredPlayers: string[] = [];
 
     constructor() {
-        super("Game");
+        // Physics only here: the other scenes would otherwise each run an
+        // empty physics world every frame
+        super({
+            key: "Game",
+            physics: {
+                default: "matter",
+                matter: {
+                    gravity: { x: 0, y: 0 },
+                    debug: false,
+                },
+            },
+        });
     }
 
     /** The menu hosts or joins a lobby, then hands over its connection. */

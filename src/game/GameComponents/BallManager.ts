@@ -1,4 +1,5 @@
 import * as Phaser from "phaser";
+import { keepFramesActive } from "../GameHelpers/FramePacer";
 import { BallLocation, Player, ShotStats } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
 import { GeneratedMap } from "../GameMaps/Type";
@@ -220,6 +221,11 @@ export class BallManager {
     }
 
     update() {
+        // Full frame rate while the balls roll
+        if (this.isSimulating) {
+            keepFramesActive();
+        }
+
         for (const ball of this.balls.values()) {
             // A ball sinking into the cup is moved by its tween instead
             if (ball.inWorld) {
