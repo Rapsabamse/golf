@@ -233,6 +233,13 @@ export class Game extends Phaser.Scene {
             this.aimController.updateCanInteract(false);
         };
 
+        // The first player to lock in starts everyone's shot clock
+        this.network.onShotClock = (ms) => {
+            if (this.network.getGameState() === GameState.PLANNING) {
+                this.ui.setShotClock(ms);
+            }
+        };
+
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
             this.gameStateHandler.handle(gamestate, data);

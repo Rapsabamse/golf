@@ -40,10 +40,14 @@ export class Network {
     private rejoinAttempt?: SavedSession;
     private rejoinEnded = false;
     private keepSessionTimer?: ReturnType<typeof setInterval>;
+    /** Leaving a saved game: called once the server has let us go. */
+    private onLeft?: () => void;
 
     onPlayerList?: (players: Player[], self: Player | undefined) => void;
     onGameStateChange?: (gamestate: GameState, data?: ServerData) => void;
     onReadyConfirmed?: () => void;
+    /** Someone locked in: the shot clock started with this long left. */
+    onShotClock?: (ms: number) => void;
 
     /** The server put us in a lobby. */
     onLobbyJoined?: () => void;
@@ -78,6 +82,21 @@ export class Network {
         this.rejoinQueue = [...sessions];
         this.rejoinEnded = false;
         this.tryNextRejoin();
+    }
+
+    /**
+     * Leave a game this browser was in, instead of rejoining it: the server
+     * takes the player out of the match. `done` is called either way, even
+     * if the server can't be reached (it then drops the player on its own
+     * once their held place runs out).
+     */
+    leave(session: SavedSession, done: () => void) {
+        RejoinStore.forget(session.token);
+        this.onLeft = done;
+        this.request({
+            type: MessageTypeClient.LEAVE_LOBBY,
+            data: { code: session.code, token: session.token },
+        });
     }
 
     private tryNextRejoin() {
@@ -162,6 +181,14 @@ export class Network {
 
             this.socket = undefined;
 
+            // Leaving a saved game: the server closes the connection when done
+            if (this.onLeft) {
+                const done = this.onLeft;
+                this.onLeft = undefined;
+                done();
+                return;
+            }
+
             if (this.rejoinQueue) {
                 this.rejoinQueue = undefined;
                 this.onRejoinFailed?.(false);
@@ -243,6 +270,13 @@ export class Network {
                 message.data.playerId
             ) {
                 this.playerId = message.data.playerId;
+            }
+
+            if (
+                message.type === MessageTypeServer.SHOT_CLOCK &&
+                typeof message.data.shotClockMs === "number"
+            ) {
+                this.onShotClock?.(message.data.shotClockMs);
             }
 
             if (

@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket, RawData } from "ws";
 import { randomUUID } from "crypto";
 import { handleMessages } from "./handlers/messageHandler";
 import { handleConnection, handleRejoin } from "./handlers/connectionHandler";
-import { handleDisconnect } from "./handlers/closeHandler";
+import { handleClose, handleDisconnect } from "./handlers/closeHandler";
 import { ServerContext } from "./serverState";
 import {
     cleanCatchphrase,
@@ -10,6 +10,7 @@ import {
     createLobby,
     findLobby,
     normalizeCode,
+    removeLobbyIfEmpty,
 } from "./lobbies";
 import { MessageTypeClient, MessageTypeServer } from "./types/types";
 
@@ -68,6 +69,34 @@ wss.on("connection", (socket: WebSocket) => {
         if (message.type === MessageTypeClient.HOST_LOBBY) {
             lobby = createLobby();
             handleConnection(socket, playerId, lobby, name, catchphrase);
+            return;
+        }
+
+        // Back after a refresh but leaving instead: out of the game for good,
+        // straight away rather than when their held place runs out
+        if (message.type === MessageTypeClient.LEAVE_LOBBY) {
+            const found =
+                typeof message.data?.code === "string"
+                    ? findLobby(message.data.code)
+                    : undefined;
+            const token = message.data?.token;
+            const player =
+                found && typeof token === "string" && token
+                    ? Array.from(found.players.values()).find(
+                          (candidate) => candidate.rejoinToken === token,
+                      )
+                    : undefined;
+
+            if (found && player) {
+                console.log(`Player ${player.id} left lobby ${found.code}`);
+                const oldSocket = player.socket;
+                handleClose(player.id, found);
+                removeLobbyIfEmpty(found);
+                // An old connection still open (the page before the refresh)
+                oldSocket?.close();
+            }
+
+            socket.close();
             return;
         }
 

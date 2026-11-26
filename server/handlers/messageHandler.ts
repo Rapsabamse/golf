@@ -20,6 +20,7 @@ import {
     startGame,
     resetGame,
     selectCourse,
+    startShotClockIfLockedIn,
     tryStartSimulation,
 } from "../gameLogic";
 
@@ -138,6 +139,9 @@ export function handleMessages(
             broadcastPlayerList(ctx);
 
             tryStartSimulation(ctx);
+
+            // Still waiting for others: the first to lock in starts their clock
+            startShotClockIfLockedIn(ctx);
             break;
 
         // Client finished simulating the round

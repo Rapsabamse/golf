@@ -93,8 +93,8 @@ function getConnectedShooters(ctx: ServerContext): Player[] {
     );
 }
 
-/** Start the clock for a new shot. When it runs out, the shot starts anyway. */
-export function startShotClock(ctx: ServerContext) {
+/** Start the shot clock. When it runs out, the shot starts anyway. */
+function startShotClock(ctx: ServerContext) {
     stopShotClock(ctx);
 
     ctx.shotClockEndsAt = Date.now() + SHOT_CLOCK_MS;
@@ -104,6 +104,32 @@ export function startShotClock(ctx: ServerContext) {
         console.log(`Lobby ${ctx.code}: shot clock ran out`);
         tryStartSimulation(ctx, true);
     }, SHOT_CLOCK_MS);
+}
+
+/**
+ * The first player has locked in: everyone else now has SHOT_CLOCK_MS to
+ * lock in too. Does nothing if the clock is already running or nobody is
+ * here to shoot.
+ */
+export function startShotClockIfLockedIn(ctx: ServerContext) {
+    if (
+        ctx.gameState !== GameState.PLANNING ||
+        ctx.shotClockTimer ||
+        ctx.playersReady.size === 0 ||
+        getConnectedShooters(ctx).length === 0
+    ) {
+        return;
+    }
+
+    startShotClock(ctx);
+
+    broadcast(
+        {
+            type: MessageTypeServer.SHOT_CLOCK,
+            data: { shotClockMs: getShotClockMs(ctx) },
+        },
+        ctx.players,
+    );
 }
 
 export function stopShotClock(ctx: ServerContext) {
@@ -123,8 +149,8 @@ export function getShotClockMs(ctx: ServerContext): number | undefined {
 }
 
 /**
- * A new shot: start the clock and tell everyone, with where the balls are
- * (extra) if they moved.
+ * A new shot: tell everyone, with where the balls are (extra) if they
+ * moved. The clock waits until the first player locks in.
  */
 function startPlanning(
     ctx: ServerContext,
@@ -133,12 +159,7 @@ function startPlanning(
     ctx.gameState = GameState.PLANNING;
     ctx.playersReady.clear();
 
-    // Nobody here to shoot: the clock waits until someone comes back
-    if (getConnectedShooters(ctx).length > 0) {
-        startShotClock(ctx);
-    } else {
-        stopShotClock(ctx);
-    }
+    stopShotClock(ctx);
 
     for (const player of ctx.players.values()) {
         broadcastSingle(

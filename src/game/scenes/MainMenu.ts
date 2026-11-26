@@ -8,8 +8,8 @@ import {
 } from "../GameHelpers/MenuHelpers";
 import { Button } from "../ui/Button";
 import { Network } from "../Networking/Network";
-import { RejoinStore } from "../Networking/RejoinStore";
-import { COLORS, CSS, FONTS, TYPE, addText, drawPennant } from "../ui/theme";
+import { RejoinStore, SavedSession } from "../Networking/RejoinStore";
+import { COLORS, CSS, FONTS, TYPE, addText, drawPanel, drawPennant } from "../ui/theme";
 import { DESIGN_HEIGHT, applyUiScale, onResize } from "../ui/layout";
 
 const PAD_WIDTH = 460;
@@ -37,6 +37,11 @@ const CODE_LENGTH = 4;
 const ROW_BUTTON_WIDTH = 220;
 const ROW_OFFSET = (PAD_WIDTH - ROW_BUTTON_WIDTH) / 2;
 
+/** The popup offering to rejoin a game you were in. */
+const POPUP_WIDTH = 480;
+const POPUP_HEIGHT = 316;
+const POPUP_PADDING = 36;
+
 type MenuMode = "choose" | "join";
 
 export class MainMenu extends Scene {
@@ -49,6 +54,20 @@ export class MainMenu extends Scene {
     /** Join mode: joins the lobby with the typed code. */
     private confirmJoinButton!: Button;
     private backLink!: Phaser.GameObjects.Text;
+    /**
+     * Back after a refresh while still in a game: a popup over the menu
+     * asking whether to rejoin it or leave it.
+     */
+    private popup!: Phaser.GameObjects.Container;
+    private popupDim!: Phaser.GameObjects.Graphics;
+    private popupBlocker!: Phaser.GameObjects.Zone;
+    private popupCard!: Phaser.GameObjects.Container;
+    private popupMessage!: Phaser.GameObjects.Text;
+    private popupStatus!: Phaser.GameObjects.Text;
+    private rejoinButton!: Button;
+    private leaveLink!: Phaser.GameObjects.Text;
+    /** Games this browser could rejoin, best first. */
+    private savedGames: SavedSession[] = [];
     private status!: Phaser.GameObjects.Text;
     private padTop = 0;
     private rowY = 0;
@@ -166,34 +185,161 @@ export class MainMenu extends Scene {
             this.backLink,
         ]);
 
+        this.createPopup();
         this.createInputs();
 
         this.layout();
         onResize(this, () => this.layout());
 
-        // Back after a refresh or a closed tab: pick the game up again
-        this.rejoinSavedGame();
+        // Back after a refresh or a closed tab: offer to pick the game up again
+        this.offerSavedGame();
 
         EventBus.emit("current-scene-ready", this);
     }
 
-    private rejoinSavedGame() {
-        const saved = RejoinStore.candidates();
+    /** Dimmed screen with a card: rejoin the game you were in, or leave it. */
+    private createPopup() {
+        // Over everything, and catching clicks so the menu below can't be used
+        this.popupDim = this.add.graphics();
+        this.popupBlocker = this.add.zone(0, 0, 1, 1).setOrigin(0).setInteractive();
 
-        if (saved.length === 0) {
+        const card = this.add.graphics();
+        drawPanel(card, -POPUP_WIDTH / 2, 0, POPUP_WIDTH, POPUP_HEIGHT, 20, 1);
+
+        const title = addText(this, 0, POPUP_PADDING, "Game in progress", {
+            size: TYPE.title,
+            bold: true,
+        }).setOrigin(0.5, 0);
+
+        this.popupMessage = addText(this, 0, POPUP_PADDING + 56, "", {
+            size: TYPE.body,
+            color: CSS.muted,
+            align: "center",
+            wrap: POPUP_WIDTH - POPUP_PADDING * 2,
+            lineSpacing: 4,
+        }).setOrigin(0.5, 0);
+
+        // Rejoining is the main choice, leaving the quiet one
+        this.rejoinButton = new Button(this, 0, POPUP_HEIGHT - 112, "Rejoin game", 260)
+            .setOnClick(() => this.rejoinSavedGame());
+
+        this.leaveLink = addText(this, 0, POPUP_HEIGHT - 44, "Leave game", {
+            size: TYPE.body,
+            bold: true,
+            color: CSS.muted,
+        })
+            .setOrigin(0.5)
+            .setPadding(12, 6, 12, 6)
+            .setInteractive({ useHandCursor: true })
+            .on("pointerover", () => this.leaveLink.setColor(CSS.text))
+            .on("pointerout", () => this.leaveLink.setColor(CSS.muted))
+            .on("pointerup", () => this.leaveSavedGame());
+
+        // Shown instead of the choices while rejoining or leaving
+        this.popupStatus = addText(this, 0, POPUP_HEIGHT - 80, "", {
+            size: TYPE.body,
+            color: CSS.muted,
+        })
+            .setOrigin(0.5)
+            .setVisible(false);
+
+        this.popupCard = this.add.container(0, 0, [
+            card,
+            title,
+            this.popupMessage,
+            this.rejoinButton,
+            this.leaveLink,
+            this.popupStatus,
+        ]);
+
+        this.popup = this.add
+            .container(0, 0, [this.popupDim, this.popupBlocker, this.popupCard])
+            .setVisible(false);
+
+        // Enter rejoins while the popup is up (the text fields are hidden then)
+        this.input.keyboard?.on("keydown-ENTER", () => {
+            if (this.popup.visible) {
+                this.rejoinButton.trigger();
+            }
+        });
+    }
+
+    /** Still in a game (after a refresh or a closed tab): ask to rejoin it or leave it. */
+    private offerSavedGame() {
+        this.savedGames = RejoinStore.candidates();
+
+        if (this.savedGames.length === 0) {
+            this.showPopup(false);
             return;
         }
 
-        this.showStatus(`Rejoining ${saved[0].code}…`);
+        this.popupMessage.setText(
+            `You're still in game ${this.savedGames[0].code}.\nRejoin to pick up where you left off.`,
+        );
+        this.showPopup(true);
+    }
+
+    private showPopup(show: boolean) {
+        this.popup.setVisible(show);
+        this.showPopupStatus("");
+
+        // The text fields are HTML on top of the canvas: hide them under the popup
+        for (const input of [this.nameInput, this.catchphraseInput]) {
+            input.style.visibility = show ? "hidden" : "visible";
+        }
+        if (show) {
+            this.codeInput.style.display = "none";
+        } else {
+            this.setMode(this.mode);
+        }
+    }
+
+    /** While rejoining or leaving: a line of status instead of the choices. */
+    private showPopupStatus(text: string) {
+        this.popupStatus.setText(text).setVisible(text !== "");
+        this.rejoinButton.setVisible(text === "");
+        this.leaveLink.setVisible(text === "");
+    }
+
+    private rejoinSavedGame() {
+        if (this.busy || !this.popup.visible || this.savedGames.length === 0) {
+            return;
+        }
+
+        this.showPopupStatus(`Rejoining ${this.savedGames[0].code}…`);
 
         const network = this.connect();
 
         network.onRejoinFailed = (ended) => {
             this.setBusy(false);
-            this.showStatus(ended ? "Your last game has ended." : "");
+            this.showPopup(false);
+            this.showStatus(ended ? "That game has ended." : "Couldn't rejoin that game.", !ended);
         };
 
-        network.rejoin(saved);
+        network.rejoin(this.savedGames);
+    }
+
+    /** Out of the game for good: the others carry on without you. */
+    private leaveSavedGame() {
+        const session = this.savedGames[0];
+        if (this.busy || !session) {
+            return;
+        }
+
+        this.showPopupStatus(`Leaving ${session.code}…`);
+
+        this.connect().leave(session, () => {
+            this.setBusy(false);
+
+            // Another game you could still rejoin (from a closed tab)
+            if (RejoinStore.candidates().length > 0) {
+                this.offerSavedGame();
+                return;
+            }
+
+            this.showPopup(false);
+            this.showStatus(`You left game ${session.code}.`);
+        });
     }
 
     /** Keep the menu centred at any size (the sky is the Backdrop scene). */
@@ -202,6 +348,17 @@ export class MainMenu extends Scene {
         this.uiScale = scale;
 
         this.menu.setPosition(width / 2, (height - DESIGN_HEIGHT) / 2);
+
+        // The popup covers the whole screen, its card over the green
+        this.popupDim.clear();
+        this.popupDim.fillStyle(0x060a18, 0.6);
+        this.popupDim.fillRect(0, 0, width, height);
+        this.popupBlocker.setSize(width, height);
+        this.popupCard.setPosition(
+            width / 2,
+            // Centred on the green (and its lip), which it hides
+            Math.max(16, this.menu.y + this.padTop + (PAD_HEIGHT + PAD_LIP - POPUP_HEIGHT) / 2),
+        );
 
         this.positionInput(this.nameInput, 0, this.padTop + 104, INPUT_WIDTH);
         this.positionInput(
@@ -251,6 +408,8 @@ export class MainMenu extends Scene {
         this.hostButton.setEnabled(!busy);
         this.joinButton.setEnabled(!busy);
         this.confirmJoinButton.setEnabled(!busy);
+        this.rejoinButton.setEnabled(!busy);
+        this.leaveLink.setAlpha(busy ? 0.4 : 1);
         this.nameInput.disabled = busy;
         this.catchphraseInput.disabled = busy;
         this.codeInput.disabled = busy;

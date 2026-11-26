@@ -56,7 +56,7 @@ export const ALL_MAPS = Array.from(
 export const MAX_SHOT_SPEED = 40;
 
 /** Time to aim and lock in each shot. */
-export const SHOT_CLOCK_MS = 30_000;
+export const SHOT_CLOCK_MS = 20_000;
 
 /**
  * How long a player's place is kept after their connection drops (a refresh
@@ -85,6 +85,11 @@ export enum MessageTypeClient {
     REJOIN_LOBBY,
     /** Host picks the course in the lobby. Data: course id. */
     SELECT_COURSE,
+    /**
+     * First message: leave a game for good instead of rejoining it (after a
+     * refresh). Data: { code, token }. The server then closes the connection.
+     */
+    LEAVE_LOBBY,
 }
 
 export enum MessageTypeServer {
@@ -94,6 +99,11 @@ export enum MessageTypeServer {
     SHOT_SELECTION_CONFIRMATION,
     /** Couldn't host or join. Data: { error }. */
     LOBBY_ERROR,
+    /**
+     * The shot clock started: someone locked in, the others have this long.
+     * Data: { shotClockMs }.
+     */
+    SHOT_CLOCK,
 }
 
 export enum GameState {
@@ -188,8 +198,9 @@ export interface ServerData {
     /** Sent with CONNECTED: keep it to rejoin after a refresh. */
     rejoinToken?: string;
     /**
-     * Time left to lock in this shot, sent with PLANNING. (Time left rather
-     * than a clock time, so it doesn't matter if the clocks disagree.)
+     * Time left to lock in this shot, sent with PLANNING and SHOT_CLOCK;
+     * undefined until the first player locks in. (Time left rather than a
+     * clock time, so it doesn't matter if the clocks disagree.)
      */
     shotClockMs?: number;
     /**

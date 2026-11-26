@@ -9,7 +9,7 @@ import {
     getShotClockMs,
     isConnected,
     pickColor,
-    startShotClock,
+    startShotClockIfLockedIn,
 } from "../gameLogic";
 import { broadcastSingle, getPlayersList } from "../serverHelpers";
 import {
@@ -98,10 +98,9 @@ export function handleRejoin(
     }
     const isHost = ctx.hostId === player.id;
 
-    // The clock stopped while nobody was here to shoot
-    if (ctx.gameState === GameState.PLANNING && !ctx.shotClockTimer) {
-        startShotClock(ctx);
-    }
+    // The clock stopped while nobody was here to shoot (it carries on if
+    // someone had already locked in)
+    startShotClockIfLockedIn(ctx);
 
     sendWelcome(ctx, player);
 
