@@ -5,6 +5,7 @@ import {
     CSS,
     TYPE,
     addText,
+    fitText,
     drawPanel,
     drawPennant,
 } from "../ui/theme";
@@ -300,9 +301,7 @@ export class Scoreboard {
             ).setOrigin(0, 0.5);
 
             const maxNameWidth = NAME_WIDTH - 32;
-            if (name.width > maxNameWidth) {
-                name.setCrop(0, 0, maxNameWidth, name.height);
-            }
+            fitText(name, maxNameWidth, isOwn ? " (you)" : "");
 
             this.container.add([dot, name]);
 

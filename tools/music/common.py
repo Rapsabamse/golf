@@ -531,7 +531,7 @@ def write_parts(folder, name, title, mix):
         idx = np.arange(a - PAD, b + PAD) % LOOP
         wavfile.write(os.path.join(folder, f"{name}-{i + 1}.wav"), SR, audio[idx])
         parts.append({"file": f"{name}-{i + 1}.mp3", "samples": b - a})
-    entry = {"id": name, "title": title, "sampleRate": SR, "pad": PAD, "parts": parts}
+    entry = {"id": name, "title": title, "bpm": BPM, "sampleRate": SR, "pad": PAD, "parts": parts}
     with open(os.path.join(folder, f"{name}.json"), "w") as f:
         json.dump(entry, f, indent=2)
     print(f"{title}: {LOOP / SR:.1f} s in {PARTS} parts")

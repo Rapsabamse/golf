@@ -3,6 +3,7 @@
     {
       "id": "disco",
       "title": "Hole in Fun",
+      "bpm": 128,
       "sampleRate": 44100,
       "pad": 22050,
       "parts": [
@@ -27,6 +28,7 @@
     {
       "id": "synthwave",
       "title": "Neon Fairway",
+      "bpm": 112,
       "sampleRate": 44100,
       "pad": 22050,
       "parts": [
@@ -51,6 +53,7 @@
     {
       "id": "eurobeat",
       "title": "Hole in One Rush",
+      "bpm": 156,
       "sampleRate": 44100,
       "pad": 22050,
       "parts": [

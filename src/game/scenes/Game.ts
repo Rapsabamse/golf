@@ -11,7 +11,6 @@ import { Scoreboard } from "../GameComponents/Scoreboard";
 import { TiledMapLoader } from "../GameMaps/TileReader";
 import { getBaseMap } from "../GameMaps/maps";
 import { GameStateHandler } from "../handlers/GameStateHandler";
-import { Music } from "../GameComponents/Music";
 import { SoundEffects } from "../GameComponents/SoundEffects";
 import {
     applyUiScale,
@@ -34,8 +33,6 @@ export class Game extends Phaser.Scene {
     private scoreboard!: Scoreboard;
     private gameStateHandler!: GameStateHandler;
     private sounds = new SoundEffects();
-    /** Battle music during matches. */
-    private music = new Music(this.sounds);
 
     private scoredPlayers: string[] = [];
 
@@ -83,7 +80,6 @@ export class Game extends Phaser.Scene {
         });
 
         this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-            this.music.destroy();
             this.scene.stop("Hud");
         });
 
@@ -148,7 +144,6 @@ export class Game extends Phaser.Scene {
             () => this.lockIn(),
             () => this.haveIScored(),
             () => this.sounds.isMuted(),
-            () => this.music.isEnabled(),
         );
 
         this.ui.onClockTick = () => this.sounds.clockTick();
@@ -230,20 +225,11 @@ export class Game extends Phaser.Scene {
         //Subscribe to gamestateUpdates
         this.network.onGameStateChange = (gamestate, data?) => {
             this.gameStateHandler.handle(gamestate, data);
-
-            // Music for the match, quiet in the lobby
-            this.music.setInMatch(gamestate !== GameState.WAITING);
         };
 
-        // M toggles all sound, N just the music
+        // M toggles sound
         this.input.keyboard?.on("keydown-M", () => {
             this.sounds.toggleMute();
-            this.music.refresh();
-            this.ui.refreshPlayerPanel(this.network.getGameState());
-        });
-
-        this.input.keyboard?.on("keydown-N", () => {
-            this.music.toggle();
             this.ui.refreshPlayerPanel(this.network.getGameState());
         });
 

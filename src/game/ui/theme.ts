@@ -86,6 +86,28 @@ export function addText(
     return text;
 }
 
+/**
+ * Shorten a text to fit `maxWidth`, ending it with "…" (and then `suffix`,
+ * which is always kept, like " (you)"). Cropping instead cuts the wrong
+ * part: text is drawn at 2-3x resolution and crop works in those texture
+ * pixels, so only the top of the letters would show.
+ */
+export function fitText(
+    text: Phaser.GameObjects.Text,
+    maxWidth: number,
+    suffix = "",
+) {
+    const full = text.text.slice(0, text.text.length - suffix.length);
+    let length = full.length;
+
+    while (length > 1 && text.width > maxWidth) {
+        length -= 1;
+        text.setText(full.slice(0, length).trimEnd() + "…" + suffix);
+    }
+
+    return text;
+}
+
 /** Navy glass panel with a thin edge. */
 export function drawPanel(
     graphics: Phaser.GameObjects.Graphics,

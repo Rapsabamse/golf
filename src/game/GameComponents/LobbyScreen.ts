@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { Network } from "../Networking/Network";
 import { Button } from "../ui/Button";
-import { COLORS, CSS, TYPE, addText, drawPanel } from "../ui/theme";
+import { COLORS, CSS, TYPE, addText, fitText, drawPanel } from "../ui/theme";
 import { COURSES } from "../../../server/types/types";
 
 const ROW_HEIGHT = 40;
@@ -262,9 +262,7 @@ export class LobbyScreen {
             // Keep long names clear of the Host tag
             const maxNameWidth =
                 (tag ? tag.x - tag.width - 12 : rowLeft + COLUMN_WIDTH) - nameX;
-            if (name.width > maxNameWidth) {
-                name.setCrop(0, 0, maxNameWidth, name.height);
-            }
+            fitText(name, maxNameWidth);
         });
 
         y += panelHeight + 44;

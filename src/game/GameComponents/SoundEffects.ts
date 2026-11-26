@@ -89,7 +89,7 @@ export class SoundEffects {
     }
 
     /**
-     * The game's one audio context (the music plays through it too), made
+     * The game's one audio context, made
      * on first use. Undefined if the browser has no Web Audio.
      */
     getContext(): AudioContext | undefined {

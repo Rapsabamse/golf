@@ -997,7 +997,7 @@ if __name__ == "__main__":
         idx = np.arange(a - PAD, b + PAD) % LOOP
         wavfile.write(os.path.join(folder, f"disco-{i + 1}.wav"), SR, audio[idx])
         parts.append({"file": f"disco-{i + 1}.mp3", "samples": b - a})
-    entry = {"id": "disco", "title": "Hole in Fun", "sampleRate": SR, "pad": PAD, "parts": parts}
+    entry = {"id": "disco", "title": "Hole in Fun", "bpm": BPM, "sampleRate": SR, "pad": PAD, "parts": parts}
     with open(os.path.join(folder, "disco.json"), "w") as f:
         json.dump(entry, f, indent=2)
     print(f"Hole in Fun: {LOOP / SR:.1f} s in {PARTS} parts")

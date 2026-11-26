@@ -81,7 +81,6 @@ export class GameUI {
         private lockIn: () => void,
         private haveIScored: () => boolean,
         private isMuted: () => boolean,
-        private isMusicOn: () => boolean,
     ) {
         this.scene = hud;
         this.create();
@@ -535,7 +534,7 @@ export class GameUI {
         this.actionButton.setVisible(true);
     }
 
-    /** Key hints bottom-left: [M] Sound on   [N] Music on   [Scroll] Zoom   [Enter] … */
+    /** Key hints bottom-left: [M] Sound on   [Scroll] Zoom   [Enter] … */
     private createControls() {
         this.controls = this.scene.add.container(MARGIN, 0);
     }
@@ -546,7 +545,6 @@ export class GameUI {
         const inLobby = this.lastState === GameState.WAITING;
         const hints: [string, string][] = [
             ["M", this.isMuted() ? "Sound off" : "Sound on"],
-            ["N", this.isMusicOn() ? "Music on" : "Music off"],
         ];
 
         // There's no course to zoom in the lobby

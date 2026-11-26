@@ -1,7 +1,7 @@
 import * as Phaser from "phaser";
 import { GameState, Player } from "../../../server/types/types";
 import { Network } from "../Networking/Network";
-import { COLORS, CSS, MARGIN, TYPE, addText, drawPanel } from "../ui/theme";
+import { COLORS, CSS, MARGIN, TYPE, addText, fitText, drawPanel } from "../ui/theme";
 
 const WIDTH = 300;
 const PADDING = 18;
@@ -109,9 +109,7 @@ export class PlayerPanel {
 
             // Keep long names clear of the status
             const maxNameWidth = status.x - status.width - 12 - nameX;
-            if (name.width > maxNameWidth) {
-                name.setCrop(0, 0, maxNameWidth, name.height);
-            }
+            fitText(name, maxNameWidth);
 
             this.container.add([name, status]);
 

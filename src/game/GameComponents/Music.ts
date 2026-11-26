@@ -31,6 +31,8 @@ const STORAGE_KEY = "golf.music";
 interface Track {
     id: string;
     title: string;
+    /** Tempo, so the game can move in time with it. */
+    bpm?: number;
     sampleRate: number;
     /** Samples of padding at each end of every part's file. */
     pad: number;
@@ -61,7 +63,28 @@ interface Playback {
     nextEntry: Entry;
     nextStart: number;
     timer?: ReturnType<typeof setTimeout>;
+    /** Listens to what's playing, for the visuals. */
+    analyser: AnalyserNode;
+    spectrum: Uint8Array<ArrayBuffer>;
+    /** When each track started (scheduled ahead), to know which is playing now. */
+    starts: { at: number; track: number; trackStart: number }[];
 }
+
+/** What the music is doing right now, for things that move with it. */
+export interface MusicPulse {
+    /** The track playing (its id in music.json), or undefined in silence. */
+    track?: string;
+    /** Beats since the track started (fractional). */
+    beat: number;
+    /** 1 right on each beat, falling away until the next. */
+    kick: number;
+    /** How much low end there is right now, 0 to 1. */
+    bass: number;
+    /** How loud the music is right now, 0 to 1. */
+    level: number;
+}
+
+export const SILENCE: MusicPulse = { beat: 0, kick: 0, bass: 0, level: 0 };
 
 /**
  * Plays the battle music during matches. It's silent in the lobby, when
@@ -79,6 +102,12 @@ export class Music {
     private resumeAt?: Position;
     /** The last track played, so the next pick is a different one. */
     private lastTrack = -1;
+    /** The music list once loaded, for reading the tempo every frame. */
+    private loaded?: Manifest;
+    /** Slowly-followed peaks, so loudness reads as 0..1 in every track. */
+    private bassPeak = 0.3;
+    private levelPeak = 0.3;
+    private bassLevel = 0;
 
     constructor(private readonly sounds: SoundEffects) {}
 
@@ -168,8 +197,14 @@ export class Music {
         const now = context.currentTime;
         output.gain.setValueAtTime(0.0001, now);
         output.gain.exponentialRampToValueAtTime(VOLUME, now + FADE_IN);
-        output.connect(context.destination);
+        // The analyser sits between the music and the speakers
+        const analyser = context.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.4;
+        output.connect(analyser);
+        analyser.connect(context.destination);
 
+        this.loaded = manifest;
         this.playback = {
             context,
             output,
@@ -178,6 +213,9 @@ export class Music {
             next: at,
             nextEntry: "start",
             nextStart: now,
+            analyser,
+            spectrum: new Uint8Array(analyser.frequencyBinCount),
+            starts: [],
         };
         this.playPart(manifest, at, buffer, now + 0.05, "start");
     }
@@ -253,6 +291,18 @@ export class Music {
             playback.sources = playback.sources.filter((s) => s !== source);
         };
 
+        // Remember when this track starts (its first part, or where we resumed)
+        if (entry !== "join") {
+            const before = track.parts
+                .slice(0, at.part)
+                .reduce((sum, part) => sum + part.samples, 0);
+            playback.starts.push({
+                at: when,
+                track: at.track,
+                trackStart: when - before / track.sampleRate,
+            });
+        }
+
         playback.sources.push(source);
         playback.current = at;
         playback.next = next;
@@ -294,6 +344,67 @@ export class Music {
             Math.max(nextStart, earliest),
             late && nextEntry === "join" ? "start" : nextEntry,
         );
+    }
+
+    /**
+     * Where the music is now: the track, the beat, and how hard it's
+     * hitting. Call it once per frame.
+     */
+    getPulse(): MusicPulse {
+        const playback = this.playback;
+        const manifest = this.loaded;
+        if (!playback || !manifest) {
+            this.bassLevel = 0;
+            return SILENCE;
+        }
+
+        const { context, analyser, spectrum, starts } = playback;
+        // What's coming out of the speakers now, not what's being scheduled
+        const now = context.currentTime - (context.outputLatency || context.baseLatency || 0);
+
+        // The latest track start that has happened
+        while (starts.length > 1 && starts[1].at <= now) {
+            starts.shift();
+        }
+        const playing = starts[0];
+        if (!playing || playing.at > now) {
+            return SILENCE;
+        }
+
+        const track = manifest.tracks[playing.track];
+        const beat = Math.max(0, ((now - playing.trackStart) * (track.bpm ?? 120)) / 60);
+        const kick = Math.exp(-(beat % 1) * 5);
+
+        // Low end and overall loudness, each against its own slowly-falling peak
+        analyser.getByteFrequencyData(spectrum);
+        const binHz = context.sampleRate / analyser.fftSize;
+        const bassBins = Math.max(1, Math.round(150 / binHz));
+        const allBins = Math.round(8000 / binHz);
+        let bass = 0;
+        let level = 0;
+        for (let i = 0; i < allBins; i++) {
+            const value = spectrum[i] / 255;
+            level += value;
+            if (i < bassBins) {
+                bass += value;
+            }
+        }
+        bass /= bassBins;
+        level /= allBins;
+
+        this.bassPeak = Math.max(bass, this.bassPeak * 0.999, 0.2);
+        this.levelPeak = Math.max(level, this.levelPeak * 0.999, 0.15);
+        // Rise fast, fall a little slower: hits read as hits
+        const target = Math.min(1, bass / this.bassPeak) ** 2;
+        this.bassLevel += (target - this.bassLevel) * (target > this.bassLevel ? 0.6 : 0.15);
+
+        return {
+            track: track.id,
+            beat,
+            kick,
+            bass: this.bassLevel,
+            level: Math.min(1, level / this.levelPeak),
+        };
     }
 
     private stop(fade = FADE_OUT) {
